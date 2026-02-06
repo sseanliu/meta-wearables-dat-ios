@@ -24,16 +24,20 @@ class AudioManager {
     )!
   }
 
-  func setupAudioSession() throws {
+  func setupAudioSession(useIPhoneMode: Bool = false) throws {
     let session = AVAudioSession.sharedInstance()
+    // iPhone mode: voiceChat for aggressive echo cancellation (mic + speaker co-located)
+    // Glasses mode: videoChat for mild AEC (mic is on glasses, speaker is on phone)
+    let mode: AVAudioSession.Mode = useIPhoneMode ? .voiceChat : .videoChat
     try session.setCategory(
       .playAndRecord,
-      mode: .videoChat,
+      mode: mode,
       options: [.defaultToSpeaker, .allowBluetooth]
     )
     try session.setPreferredSampleRate(GeminiConfig.inputAudioSampleRate)
     try session.setPreferredIOBufferDuration(0.064)
     try session.setActive(true)
+    NSLog("[Audio] Session mode: %@", useIPhoneMode ? "voiceChat (iPhone)" : "videoChat (glasses)")
   }
 
   func startCapture() throws {

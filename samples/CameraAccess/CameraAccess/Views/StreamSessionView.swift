@@ -38,6 +38,10 @@ struct StreamSessionView: View {
     }
     .task {
       viewModel.geminiSessionVM = geminiVM
+      geminiVM.streamingMode = viewModel.streamingMode
+    }
+    .onChange(of: viewModel.streamingMode) { newMode in
+      geminiVM.streamingMode = newMode
     }
     .alert("Error", isPresented: $viewModel.showError) {
       Button("OK") {

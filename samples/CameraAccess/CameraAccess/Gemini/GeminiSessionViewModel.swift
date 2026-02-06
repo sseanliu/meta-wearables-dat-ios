@@ -17,6 +17,8 @@ class GeminiSessionViewModel: ObservableObject {
   private var lastVideoFrameTime: Date = .distantPast
   private var stateObservation: Task<Void, Never>?
 
+  var streamingMode: StreamingMode = .glasses
+
   func startSession() async {
     guard !isGeminiActive else { return }
 
@@ -106,7 +108,7 @@ class GeminiSessionViewModel: ObservableObject {
 
     // Setup audio
     do {
-      try audioManager.setupAudioSession()
+      try audioManager.setupAudioSession(useIPhoneMode: streamingMode == .iPhone)
     } catch {
       errorMessage = "Audio setup failed: \(error.localizedDescription)"
       isGeminiActive = false
