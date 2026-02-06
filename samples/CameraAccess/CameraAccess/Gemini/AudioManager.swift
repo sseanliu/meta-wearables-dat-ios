@@ -29,6 +29,9 @@ class AudioManager {
     try session.setPreferredSampleRate(GeminiConfig.inputAudioSampleRate)
     try session.setPreferredIOBufferDuration(0.064)
     try session.setActive(true)
+    #if DEBUG
+    NSLog("[AudioManager] Audio session active. sampleRate=\(session.sampleRate), inputChannels=\(session.inputNumberOfChannels), outputChannels=\(session.outputNumberOfChannels), category=\(session.category.rawValue)")
+    #endif
   }
 
   func startCapture() throws {
@@ -70,18 +73,32 @@ class AudioManager {
       converter = AVAudioConverter(from: inputNativeFormat, to: targetFormat)
     }
 
+    #if DEBUG
+    NSLog("[AudioManager] Input native format: \(inputNativeFormat), tapFormat: \(tapFormat), needsConverter: \(converter != nil)")
+    #endif
+
+    var captureCount = 0
     inputNode.installTap(onBus: 0, bufferSize: 1024, format: tapFormat) { [weak self] buffer, _ in
       guard let self else { return }
+      captureCount += 1
 
       if let converter {
-        // Convert from native format to 16kHz Int16
         guard let convertedBuffer = self.convertBuffer(buffer, using: converter, targetFormat: targetFormat) else {
+          if captureCount <= 3 {
+            NSLog("[AudioManager] Conversion failed for buffer #\(captureCount)")
+          }
           return
         }
         let data = self.bufferToData(convertedBuffer)
+        if captureCount <= 3 || captureCount % 100 == 0 {
+          NSLog("[AudioManager] Captured audio #\(captureCount): \(data.count) bytes (converted)")
+        }
         self.onAudioCaptured?(data)
       } else {
         let data = self.bufferToData(buffer)
+        if captureCount <= 3 || captureCount % 100 == 0 {
+          NSLog("[AudioManager] Captured audio #\(captureCount): \(data.count) bytes")
+        }
         self.onAudioCaptured?(data)
       }
     }
@@ -89,10 +106,23 @@ class AudioManager {
     try audioEngine.start()
     playerNode.play()
     isCapturing = true
+    #if DEBUG
+    NSLog("[AudioManager] Engine started, playerNode playing, capture active")
+    #endif
   }
 
+  private var playCount = 0
+
   func playAudio(data: Data) {
-    guard isCapturing, !data.isEmpty else { return }
+    guard isCapturing, !data.isEmpty else {
+      #if DEBUG
+      NSLog("[AudioManager] playAudio skipped: isCapturing=\(isCapturing), dataEmpty=\(data.isEmpty)")
+      #endif
+      return
+    }
+
+    playCount += 1
+    let count = playCount
 
     // Gemini sends PCM 24kHz 16-bit mono
     // Convert to float32 for AVAudioPlayerNode
@@ -104,9 +134,19 @@ class AudioManager {
     )!
 
     let frameCount = UInt32(data.count) / (GeminiConfig.audioBitsPerSample / 8 * GeminiConfig.audioChannels)
-    guard frameCount > 0 else { return }
+    guard frameCount > 0 else {
+      #if DEBUG
+      NSLog("[AudioManager] playAudio: 0 frames from \(data.count) bytes")
+      #endif
+      return
+    }
 
-    guard let buffer = AVAudioPCMBuffer(pcmFormat: playerFormat, frameCapacity: frameCount) else { return }
+    guard let buffer = AVAudioPCMBuffer(pcmFormat: playerFormat, frameCapacity: frameCount) else {
+      #if DEBUG
+      NSLog("[AudioManager] playAudio: failed to create buffer")
+      #endif
+      return
+    }
     buffer.frameLength = frameCount
 
     // Convert Int16 PCM data to Float32
@@ -118,8 +158,17 @@ class AudioManager {
       }
     }
 
+    #if DEBUG
+    if count <= 5 || count % 50 == 0 {
+      NSLog("[AudioManager] Playing audio #\(count): \(frameCount) frames, playerPlaying=\(playerNode.isPlaying)")
+    }
+    #endif
+
     playerNode.scheduleBuffer(buffer)
     if !playerNode.isPlaying {
+      #if DEBUG
+      NSLog("[AudioManager] Restarting playerNode")
+      #endif
       playerNode.play()
     }
   }
