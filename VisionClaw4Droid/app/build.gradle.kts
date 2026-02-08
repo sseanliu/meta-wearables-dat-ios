@@ -39,6 +39,10 @@ android {
             "\"${localProps.getProperty("OPENCLAW_GATEWAY_TOKEN", "YOUR_OPENCLAW_GATEWAY_TOKEN")}\"")
         buildConfigField("String", "META_DAT_APP_ID",
             "\"${localProps.getProperty("META_DAT_APP_ID", "YOUR_META_APP_ID")}\"")
+
+        // Manifest placeholders for DAT SDK
+        manifestPlaceholders["META_DAT_APP_ID"] =
+            localProps.getProperty("META_DAT_APP_ID", "YOUR_META_APP_ID")
     }
 
     buildTypes {
@@ -66,6 +70,10 @@ android {
     buildFeatures {
         compose = true
         buildConfig = true
+    }
+
+    testOptions {
+        unitTests.isReturnDefaultValues = true
     }
 }
 
@@ -116,6 +124,11 @@ dependencies {
 
     // Accompanist permissions
     implementation("com.google.accompanist:accompanist-permissions:0.36.0")
+
+    // Unit tests (JVM — no emulator needed)
+    testImplementation("junit:junit:4.13.2")
+    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.9.0")
+    testImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")
 }
 
 kapt {

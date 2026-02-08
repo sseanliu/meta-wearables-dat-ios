@@ -23,7 +23,7 @@ import java.util.concurrent.TimeUnit
  * HTTP client for the OpenClaw gateway.
  * Equivalent to iOS OpenClawBridge.swift.
  */
-class OpenClawBridge {
+open class OpenClawBridge {
 
     private val _lastToolCallStatus = MutableStateFlow<ToolCallStatus>(ToolCallStatus.Idle)
     val lastToolCallStatus: StateFlow<ToolCallStatus> = _lastToolCallStatus.asStateFlow()
@@ -45,7 +45,7 @@ class OpenClawBridge {
     }
 
     /** Delegate a task to the OpenClaw gateway. */
-    suspend fun delegateTask(task: String, toolName: String = "execute"): ToolResult {
+    open suspend fun delegateTask(task: String, toolName: String = "execute"): ToolResult {
         _lastToolCallStatus.value = ToolCallStatus.Executing(toolName)
 
         val url = "${GeminiConfig.openClawHost}:${GeminiConfig.openClawPort}/v1/chat/completions"
