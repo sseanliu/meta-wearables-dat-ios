@@ -37,6 +37,11 @@ enum GeminiConfig {
     KeychainStore.get(.geminiApiKey) ?? ""
   }
 
+  // Gemini Live voice (applied in the setup message under generationConfig.speechConfig).
+  static var voiceName: String {
+    UserDefaults.standard.string(forKey: AppSettings.Keys.geminiVoiceName) ?? AppSettings.Defaults.geminiVoiceName
+  }
+
   static var openClawHost: String {
     UserDefaults.standard.string(forKey: AppSettings.Keys.openClawHost) ?? AppSettings.Defaults.openClawHost
   }

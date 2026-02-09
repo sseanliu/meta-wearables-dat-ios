@@ -8,6 +8,10 @@ enum AppSettings {
     // Jarvis repo defaults to `JARVIS_Main` as the canonical "smart Jarvis" agent.
     static let openClawAgentId = "JARVIS_Main"
     static let openClawProfile = "default"
+
+    // Gemini Live voice configuration (applied in the setup message).
+    // If empty, the API defaults to "Puck".
+    static let geminiVoiceName = "Puck"
   }
 
   enum Keys {
@@ -15,6 +19,7 @@ enum AppSettings {
     static let openClawPort = "visionclaw.openclaw.port"
     static let openClawAgentId = "visionclaw.openclaw.agent_id"
     static let openClawProfile = "visionclaw.openclaw.profile"
+    static let geminiVoiceName = "visionclaw.gemini.voice_name"
   }
 
   static func deviceId() -> String {

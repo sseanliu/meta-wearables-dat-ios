@@ -7,6 +7,7 @@ struct SettingsView: View {
   @AppStorage(AppSettings.Keys.openClawPort) private var openClawPort: Int = AppSettings.Defaults.openClawPort
   @AppStorage(AppSettings.Keys.openClawAgentId) private var openClawAgentId: String = AppSettings.Defaults.openClawAgentId
   @AppStorage(AppSettings.Keys.openClawProfile) private var openClawProfile: String = AppSettings.Defaults.openClawProfile
+  @AppStorage(AppSettings.Keys.geminiVoiceName) private var geminiVoiceName: String = AppSettings.Defaults.geminiVoiceName
 
   @State private var geminiApiKey: String = ""
   @State private var openClawGatewayToken: String = ""
@@ -36,6 +37,28 @@ struct SettingsView: View {
           SecureField("Gemini API Key", text: $geminiApiKey)
             .textInputAutocapitalization(.never)
             .autocorrectionDisabled(true)
+
+          Picker("Voice", selection: $geminiVoiceName) {
+            // Default voice per Gemini Live docs.
+            Text("Puck (default)").tag("Puck")
+
+            // A small curated set first; user can also type a custom voice name
+            // by editing this setting in the future if desired.
+            Text("Fenrir").tag("Fenrir")
+            Text("Zephyr").tag("Zephyr")
+            Text("Kore").tag("Kore")
+            Text("Orus").tag("Orus")
+            Text("Aoede").tag("Aoede")
+            Text("Charon").tag("Charon")
+            Text("Leda").tag("Leda")
+            Text("Alnilam").tag("Alnilam")
+          }
+          .pickerStyle(.navigationLink)
+
+          Text("Voice is applied when starting a new AI session.")
+            .font(.caption)
+            .foregroundColor(.secondary)
+
           Text(geminiConfigured ? "Configured" : "Not configured")
             .foregroundColor(geminiConfigured ? .green : .secondary)
         }

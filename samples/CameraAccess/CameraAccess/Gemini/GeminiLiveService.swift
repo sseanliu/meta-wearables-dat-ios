@@ -164,15 +164,28 @@ class GeminiLiveService: ObservableObject {
   }
 
   private func sendSetupMessage() {
+    var generationConfig: [String: Any] = [
+      "responseModalities": ["AUDIO"],
+      "thinkingConfig": [
+        "thinkingBudget": 0
+      ]
+    ]
+
+    let voice = GeminiConfig.voiceName.trimmingCharacters(in: .whitespacesAndNewlines)
+    if !voice.isEmpty {
+      generationConfig["speechConfig"] = [
+        "voiceConfig": [
+          "prebuiltVoiceConfig": [
+            "voiceName": voice
+          ]
+        ]
+      ]
+    }
+
     let setup: [String: Any] = [
       "setup": [
         "model": GeminiConfig.model,
-        "generationConfig": [
-          "responseModalities": ["AUDIO"],
-          "thinkingConfig": [
-            "thinkingBudget": 0
-          ]
-        ],
+        "generationConfig": generationConfig,
         "systemInstruction": [
           "parts": [
             ["text": GeminiConfig.systemInstruction]
