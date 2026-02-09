@@ -5,7 +5,8 @@ enum AppSettings {
     // Fill these in from the in-app Settings screen.
     static let openClawHost = "https://YOUR_VM_TAILNET_DNS"
     static let openClawPort = 8444
-    static let openClawAgentId = "jarvis"
+    // Jarvis repo defaults to `JARVIS_Main` as the canonical "smart Jarvis" agent.
+    static let openClawAgentId = "JARVIS_Main"
     static let openClawProfile = "default"
   }
 
@@ -31,4 +32,3 @@ enum AppSettings {
     return "visionclaw:\(deviceId()):\(profilePart)"
   }
 }
-
