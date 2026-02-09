@@ -189,6 +189,8 @@ Gemini Live supports function calling. This app declares a single `execute` tool
 
 **OpenClaw connection timeout** -- Make sure your iPhone can reach the gateway URL, the gateway is running, and the token matches `gateway.auth.token`. Use the in-app **Test Connection** button.
 
+**"Profile has not been explicitly trusted" / "Untrusted developer"** -- On iPhone: `Settings` -> `General` -> `VPN & Device Management` (or `Device Management`) -> under **Developer App** tap your Apple ID/team and **Trust** it.
+
 **Echo/feedback in iPhone mode** -- The app mutes the mic while the AI is speaking. If you still hear echo, try turning down the volume.
 
 **Gemini doesn't hear me** -- Check that microphone permission is granted. The app uses aggressive voice activity detection -- speak clearly and at normal volume.
