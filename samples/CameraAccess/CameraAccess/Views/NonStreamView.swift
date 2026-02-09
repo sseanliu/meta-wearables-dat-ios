@@ -33,6 +33,12 @@ struct NonStreamView: View {
             Button("Settings") {
               showSettings = true
             }
+            if wearablesVM.registrationState != .registered {
+              Button("Connect glasses") {
+                wearablesVM.connectGlasses()
+              }
+              .disabled(wearablesVM.registrationState == .registering)
+            }
             Button("Disconnect", role: .destructive) {
               wearablesVM.disconnectGlasses()
             }

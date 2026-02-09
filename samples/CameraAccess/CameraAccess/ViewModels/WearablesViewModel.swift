@@ -26,6 +26,8 @@ class WearablesViewModel: ObservableObject {
   @Published var devices: [DeviceIdentifier]
   @Published var hasMockDevice: Bool
   @Published var registrationState: RegistrationState
+  // Allow iPhone camera mode even if glasses are not registered yet.
+  @Published var allowIPhoneMode: Bool
   @Published var showGettingStartedSheet: Bool = false
   @Published var showError: Bool = false
   @Published var errorMessage: String = ""
@@ -41,6 +43,7 @@ class WearablesViewModel: ObservableObject {
     self.devices = wearables.devices
     self.hasMockDevice = false
     self.registrationState = wearables.registrationState
+    self.allowIPhoneMode = false
 
     // Set up device stream immediately to handle MockDevice events
     setupDeviceStreamTask = Task {
