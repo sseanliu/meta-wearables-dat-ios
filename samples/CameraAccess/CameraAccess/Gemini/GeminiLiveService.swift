@@ -42,7 +42,7 @@ class GeminiLiveService: ObservableObject {
 
   func connect() async -> Bool {
     guard let url = GeminiConfig.websocketURL() else {
-      connectionState = .error("No API key configured")
+      connectionState = .error("No Gemini API key configured (open Settings)")
       return false
     }
 

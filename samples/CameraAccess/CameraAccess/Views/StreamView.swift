@@ -21,6 +21,7 @@ struct StreamView: View {
   @ObservedObject var viewModel: StreamSessionViewModel
   @ObservedObject var wearablesVM: WearablesViewModel
   @ObservedObject var geminiVM: GeminiSessionViewModel
+  @State private var showSettings: Bool = false
 
   var body: some View {
     ZStack {
@@ -84,6 +85,30 @@ struct StreamView: View {
         ControlsView(viewModel: viewModel, geminiVM: geminiVM)
       }
       .padding(.all, 24)
+
+      // Top-right menu
+      VStack {
+        HStack {
+          Spacer()
+          Menu {
+            Button("Settings") {
+              showSettings = true
+            }
+            Button("Disconnect", role: .destructive) {
+              wearablesVM.disconnectGlasses()
+            }
+            .disabled(wearablesVM.registrationState != .registered)
+          } label: {
+            Image(systemName: "gearshape")
+              .resizable()
+              .aspectRatio(contentMode: .fit)
+              .foregroundColor(.white)
+              .frame(width: 24, height: 24)
+          }
+        }
+        Spacer()
+      }
+      .padding(.all, 24)
     }
     .onDisappear {
       Task {
@@ -114,6 +139,9 @@ struct StreamView: View {
       Button("OK") { geminiVM.errorMessage = nil }
     } message: {
       Text(geminiVM.errorMessage ?? "")
+    }
+    .sheet(isPresented: $showSettings) {
+      SettingsView()
     }
   }
 }

@@ -23,7 +23,7 @@ class GeminiSessionViewModel: ObservableObject {
     guard !isGeminiActive else { return }
 
     guard GeminiConfig.isConfigured else {
-      errorMessage = "Gemini API key not configured. Open GeminiConfig.swift and replace YOUR_GEMINI_API_KEY with your key from https://aistudio.google.com/apikey"
+      errorMessage = "Gemini API key not configured. Open Settings (gear icon) and paste your Gemini API key from https://aistudio.google.com/apikey"
       return
     }
 

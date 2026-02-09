@@ -21,7 +21,9 @@ class OpenClawBridge: ObservableObject {
 
   private static func newSessionKey() -> String {
     let ts = ISO8601DateFormatter().string(from: Date())
-    return "agent:main:glass:\(ts)"
+    let agent = GeminiConfig.openClawAgentId.trimmingCharacters(in: .whitespacesAndNewlines)
+    let agentPart = agent.isEmpty ? "openclaw" : agent
+    return "visionclaw:\(AppSettings.deviceId()):\(agentPart):\(ts)"
   }
 
   // MARK: - Agent Chat (session continuity via x-openclaw-session-key header)
@@ -32,7 +34,12 @@ class OpenClawBridge: ObservableObject {
   ) async -> ToolResult {
     lastToolCallStatus = .executing(toolName)
 
-    guard let url = URL(string: "\(GeminiConfig.openClawHost):\(GeminiConfig.openClawPort)/v1/chat/completions") else {
+    guard GeminiConfig.isOpenClawConfigured else {
+      lastToolCallStatus = .failed(toolName, "OpenClaw not configured")
+      return .failure("OpenClaw not configured. Open Settings and set Host + Token.")
+    }
+
+    guard let url = GeminiConfig.openClawURL(path: "/v1/chat/completions") else {
       lastToolCallStatus = .failed(toolName, "Invalid URL")
       return .failure("Invalid gateway URL")
     }
@@ -42,9 +49,15 @@ class OpenClawBridge: ObservableObject {
     request.setValue("Bearer \(GeminiConfig.openClawGatewayToken)", forHTTPHeaderField: "Authorization")
     request.setValue("application/json", forHTTPHeaderField: "Content-Type")
     request.setValue(sessionKey, forHTTPHeaderField: "x-openclaw-session-key")
+    let agentId = GeminiConfig.openClawAgentId.trimmingCharacters(in: .whitespacesAndNewlines)
+    if !agentId.isEmpty {
+      request.setValue(agentId, forHTTPHeaderField: "x-openclaw-agent-id")
+    }
 
+    let model = agentId.isEmpty ? "openclaw" : "openclaw:\(agentId)"
     let body: [String: Any] = [
-      "model": "openclaw",
+      "model": model,
+      "user": GeminiConfig.openClawUser,
       "messages": [
         ["role": "user", "content": task]
       ],

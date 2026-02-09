@@ -13,62 +13,89 @@ enum GeminiConfig {
   static let videoJPEGQuality: CGFloat = 0.5
 
   static let systemInstruction = """
-    You are an AI assistant for someone wearing Meta Ray-Ban smart glasses. You can see through their camera and have a voice conversation. Keep responses concise and natural.
+    You are Jarvis: calm, capable, concise. You are speaking to a user wearing Meta Ray-Ban smart glasses (or using an iPhone camera). You can see through their camera and have a voice conversation.
 
-    CRITICAL: You have NO memory, NO storage, and NO ability to take actions on your own. You cannot remember things, keep lists, set reminders, search the web, send messages, or do anything persistent. You are ONLY a voice interface.
+    You do NOT have reliable long-term memory or storage. Do not claim you saved/remembered anything unless you delegated it via the tool.
 
-    You have exactly ONE tool: execute. This connects you to a powerful personal assistant that can do anything -- send messages, search the web, manage lists, set reminders, create notes, research topics, control smart home devices, interact with apps, and much more.
+    You have exactly ONE tool: execute(task). This delegates to the user's Jarvis/OpenClaw assistant, which can take real actions: send messages, search the web, manage calendars/lists, create notes/docs, and interact with connected apps.
 
-    ALWAYS use execute when the user asks you to:
-    - Send a message to someone (any platform: WhatsApp, Telegram, iMessage, Slack, etc.)
-    - Search or look up anything (web, local info, facts, news)
-    - Add, create, or modify anything (shopping lists, reminders, notes, todos, events)
-    - Research, analyze, or draft anything
-    - Control or interact with apps, devices, or services
-    - Remember or store any information for later
+    When the user asks for any action beyond answering a question, you MUST:
+    1) Speak a brief acknowledgment first (one short sentence).
+    2) Then call execute with a clear, detailed task description including all relevant context (platform, recipients, exact text, quantities, times, links, preferences).
 
-    Be detailed in your task description. Include all relevant context: names, content, platforms, quantities, etc. The assistant works better with complete information.
+    For irreversible/cost-bearing/public actions (payments, bookings with fees, publishing, sending to a new recipient, etc.), ask for explicit confirmation BEFORE calling execute.
 
-    NEVER pretend to do these things yourself.
+    Family sharing marker:
+    - Only include [[FAMILY]] in the execute task when the user explicitly says it's shared/family, OR you suggest sharing and the user explicitly agrees.
+    - Never include [[FAMILY]] for business, investors, deals, board items, or sensitive work topics.
 
-    IMPORTANT: Before calling execute, ALWAYS speak a brief acknowledgment first. For example:
-    - "Sure, let me add that to your shopping list." then call execute.
-    - "Got it, searching for that now." then call execute.
-    - "On it, sending that message." then call execute.
-    Never call execute silently -- the user needs verbal confirmation that you heard them and are working on it. The tool may take several seconds to complete, so the acknowledgment lets them know something is happening.
-
-    For messages, confirm recipient and content before delegating unless clearly urgent.
+    Never pretend to have done an action without using execute.
     """
 
-  // ---------------------------------------------------------------
-  // REQUIRED: Add your own Gemini API key here.
-  // Get one at https://aistudio.google.com/apikey
-  // ---------------------------------------------------------------
-  static let apiKey = "YOUR_GEMINI_API_KEY"
+  // Config is set via the in-app Settings screen (Keychain + UserDefaults).
+  static var apiKey: String {
+    KeychainStore.get(.geminiApiKey) ?? ""
+  }
 
-  // ---------------------------------------------------------------
-  // OPTIONAL: OpenClaw gateway config (for agentic tool-calling).
-  // Only needed if you want Gemini to perform actions (web search,
-  // send messages, delegate tasks) via an OpenClaw gateway on your Mac.
-  // See README.md for setup instructions.
-  // ---------------------------------------------------------------
-  static let openClawHost = "http://YOUR_MAC_HOSTNAME.local"
-  static let openClawPort = 18789
-  static let openClawHookToken = "YOUR_OPENCLAW_HOOK_TOKEN"
-  static let openClawGatewayToken = "YOUR_OPENCLAW_GATEWAY_TOKEN"
+  static var openClawHost: String {
+    UserDefaults.standard.string(forKey: AppSettings.Keys.openClawHost) ?? AppSettings.Defaults.openClawHost
+  }
+
+  static var openClawPort: Int {
+    let v = UserDefaults.standard.object(forKey: AppSettings.Keys.openClawPort) as? Int
+    return (v ?? AppSettings.Defaults.openClawPort)
+  }
+
+  static var openClawGatewayToken: String {
+    KeychainStore.get(.openClawGatewayToken) ?? ""
+  }
+
+  static var openClawAgentId: String {
+    UserDefaults.standard.string(forKey: AppSettings.Keys.openClawAgentId) ?? AppSettings.Defaults.openClawAgentId
+  }
+
+  static var openClawProfile: String {
+    UserDefaults.standard.string(forKey: AppSettings.Keys.openClawProfile) ?? AppSettings.Defaults.openClawProfile
+  }
+
+  static var openClawUser: String {
+    AppSettings.openClawUser(profile: openClawProfile)
+  }
 
   static func websocketURL() -> URL? {
-    guard apiKey != "YOUR_GEMINI_API_KEY" && !apiKey.isEmpty else { return nil }
+    guard !apiKey.isEmpty else { return nil }
     return URL(string: "\(websocketBaseURL)?key=\(apiKey)")
   }
 
   static var isConfigured: Bool {
-    return apiKey != "YOUR_GEMINI_API_KEY" && !apiKey.isEmpty
+    return !apiKey.isEmpty
   }
 
   static var isOpenClawConfigured: Bool {
-    return openClawGatewayToken != "YOUR_OPENCLAW_GATEWAY_TOKEN"
-      && !openClawGatewayToken.isEmpty
-      && openClawHost != "http://YOUR_MAC_HOSTNAME.local"
+    return !openClawGatewayToken.isEmpty
+      && !openClawHost.isEmpty
+      && !openClawHost.contains("YOUR_VM_TAILNET_DNS")
+  }
+
+  static func openClawURL(path: String) -> URL? {
+    let raw = openClawHost.trimmingCharacters(in: .whitespacesAndNewlines)
+    if raw.isEmpty { return nil }
+
+    // Handle bare host input like "jarvis.tailnet.ts.net".
+    let withScheme: String
+    if raw.hasPrefix("http://") || raw.hasPrefix("https://") {
+      withScheme = raw
+    } else {
+      withScheme = "https://\(raw)"
+    }
+
+    guard var comps = URLComponents(string: withScheme) else { return nil }
+    if comps.port == nil {
+      comps.port = openClawPort
+    }
+    comps.path = path.hasPrefix("/") ? path : "/" + path
+    comps.query = nil
+    comps.fragment = nil
+    return comps.url
   }
 }

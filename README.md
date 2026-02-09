@@ -67,11 +67,7 @@ open CameraAccess.xcodeproj
 
 Get a free API key at [Google AI Studio](https://aistudio.google.com/apikey).
 
-Open `samples/CameraAccess/CameraAccess/Gemini/GeminiConfig.swift` and replace the placeholder:
-
-```swift
-static let apiKey = "YOUR_GEMINI_API_KEY"  // <-- paste your key here
-```
+Build and run the app, then open **Settings** (gear icon) and paste your Gemini API key.
 
 ### 3. Build and run
 
@@ -124,13 +120,11 @@ Key settings:
 
 ### 2. Configure the iOS app
 
-In `GeminiConfig.swift`, update the OpenClaw settings:
-
-```swift
-static let openClawHost = "http://Your-Mac.local"           // your Mac's Bonjour hostname
-static let openClawPort = 18789
-static let openClawGatewayToken = "your-gateway-token-here"  // must match gateway.auth.token
-```
+In the app, open **Settings** (gear icon) and set:
+- OpenClaw Host (e.g., `https://<VM_TAILNET_DNS>` if using Tailscale Serve)
+- Port (e.g., `8444` if proxying)
+- Gateway Token (must match `gateway.auth.token`)
+- Agent Id (optional; default `jarvis`)
 
 To find your Mac's Bonjour hostname: **System Settings > General > Sharing** -- it's shown at the top (e.g., `Johns-MacBook-Pro.local`).
 
@@ -199,9 +193,9 @@ Gemini Live supports function calling. This app declares a single `execute` tool
 
 ## Troubleshooting
 
-**"Gemini API key not configured"** -- Open `GeminiConfig.swift` and add your API key.
+**"Gemini API key not configured"** -- Open Settings (gear icon) and add your API key.
 
-**OpenClaw connection timeout** -- Make sure your iPhone and Mac are on the same Wi-Fi network, the gateway is running (`openclaw gateway restart`), and the hostname in `GeminiConfig.swift` matches your Mac's Bonjour name.
+**OpenClaw connection timeout** -- Make sure your iPhone can reach the gateway URL, the gateway is running (`openclaw gateway restart`), and the token matches `gateway.auth.token`. Use the in-app **Test Connection** button.
 
 **Echo/feedback in iPhone mode** -- The app mutes the mic while the AI is speaking. If you still hear echo, try turning down the volume.
 
