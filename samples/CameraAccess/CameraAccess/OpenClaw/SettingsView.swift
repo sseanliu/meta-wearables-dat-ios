@@ -59,7 +59,7 @@ struct SettingsView: View {
             .textInputAutocapitalization(.never)
             .autocorrectionDisabled(true)
 
-          TextField("Agent Id (default: jarvis)", text: $openClawAgentId)
+          TextField("Agent Id (default: JARVIS_Main)", text: $openClawAgentId)
             .textInputAutocapitalization(.never)
             .autocorrectionDisabled(true)
 
@@ -151,4 +151,3 @@ struct SettingsView: View {
     ].joined(separator: "\n")
   }
 }
-
