@@ -1,0 +1,8 @@
+.DS_Store
+
+# Xcode user-specific state
+**/xcuserdata/
+**/*.xcuserstate
+
+# SPM resolution can be regenerated; avoid committing per-user workspace state.
+**/xcshareddata/swiftpm/Package.resolved
