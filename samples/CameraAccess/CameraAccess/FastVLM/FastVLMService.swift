@@ -48,6 +48,12 @@ class FastVLMService {
     private var lastAnalyzeStart = Date.distantPast
     private var frameCount = 0
 
+    // Temporal smoothing: only update displayed label when a new label appears N times in a row
+    private let confirmationThreshold = 2
+    private var candidateLabel = ""
+    private var candidateCount = 0
+    private var confirmedLabel = ""
+
     // MARK: - Init
 
     init() {
@@ -170,9 +176,11 @@ class FastVLMService {
                 }
 
                 if !Task.isCancelled {
-                    self.output = result.output
+                    let rawLabel = result.output.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
                     let totalTime = Date().timeIntervalSince(frameStart)
-                    print("[FastVLM] Frame #\(thisFrame) - TOTAL: \(Int(totalTime * 1000))ms")
+                    print("[FastVLM] Frame #\(thisFrame) - raw: \"\(rawLabel)\" - TOTAL: \(Int(totalTime * 1000))ms")
+
+                    self.updateLabel(rawLabel)
                 }
             } catch {
                 if !Task.isCancelled {
@@ -188,6 +196,31 @@ class FastVLMService {
         }
 
         currentTask = task
+    }
+
+    /// Temporal smoothing: only update the displayed label when a new label is confirmed N times in a row.
+    private func updateLabel(_ rawLabel: String) {
+        if rawLabel == confirmedLabel {
+            // Same as current — reset candidate
+            candidateLabel = ""
+            candidateCount = 0
+            return
+        }
+
+        if rawLabel == candidateLabel {
+            candidateCount += 1
+        } else {
+            candidateLabel = rawLabel
+            candidateCount = 1
+        }
+
+        if candidateCount >= confirmationThreshold {
+            confirmedLabel = rawLabel
+            output = rawLabel
+            candidateLabel = ""
+            candidateCount = 0
+            print("[FastVLM] Label confirmed: \"\(rawLabel)\"")
+        }
     }
 
     /// Called from the video frame pipeline. Runs continuously — back-pressure via isRunning guard.
@@ -220,5 +253,8 @@ class FastVLMService {
         output = ""
         ttft = ""
         evaluationState = .idle
+        candidateLabel = ""
+        candidateCount = 0
+        confirmedLabel = ""
     }
 }
