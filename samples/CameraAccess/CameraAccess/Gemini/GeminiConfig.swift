@@ -40,13 +40,12 @@ enum GeminiConfig {
     For messages, confirm recipient and content before delegating unless clearly urgent.
     """
 
-  // Secrets are stored in Secrets.swift (gitignored).
-  // Copy Secrets.example.swift -> Secrets.swift and fill in your values.
-  static let apiKey = Secrets.geminiAPIKey
-  static let openClawHost = Secrets.openClawHost
-  static let openClawPort = Secrets.openClawPort
-  static let openClawHookToken = Secrets.openClawHookToken
-  static let openClawGatewayToken = Secrets.openClawGatewayToken
+  // Secrets are loaded from SecretsManager (device storage). Configure via Settings screen.
+  static var apiKey: String { SecretsManager.shared.geminiAPIKey }
+  static var openClawHost: String { SecretsManager.shared.openClawHost }
+  static var openClawPort: Int { SecretsManager.shared.openClawPort }
+  static var openClawHookToken: String { SecretsManager.shared.openClawHookToken }
+  static var openClawGatewayToken: String { SecretsManager.shared.openClawGatewayToken }
 
   static func websocketURL() -> URL? {
     guard apiKey != "YOUR_GEMINI_API_KEY" && !apiKey.isEmpty else { return nil }

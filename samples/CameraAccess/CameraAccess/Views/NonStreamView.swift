@@ -20,6 +20,7 @@ struct NonStreamView: View {
   @ObservedObject var viewModel: StreamSessionViewModel
   @ObservedObject var wearablesVM: WearablesViewModel
   @State private var sheetHeight: CGFloat = 300
+  @State private var showSettings = false
 
   var body: some View {
     ZStack {
@@ -28,11 +29,8 @@ struct NonStreamView: View {
       VStack {
         HStack {
           Spacer()
-          Menu {
-            Button("Disconnect", role: .destructive) {
-              wearablesVM.disconnectGlasses()
-            }
-            .disabled(wearablesVM.registrationState != .registered)
+          Button {
+            showSettings = true
           } label: {
             Image(systemName: "gearshape")
               .resizable()
@@ -100,6 +98,9 @@ struct NonStreamView: View {
         }
       }
       .padding(.all, 24)
+    }
+    .sheet(isPresented: $showSettings) {
+      SettingsView(wearablesVM: wearablesVM)
     }
     .sheet(isPresented: $wearablesVM.showGettingStartedSheet) {
       if #available(iOS 16.0, *) {
