@@ -38,7 +38,11 @@ struct RegistrationView: View {
             // This handles registration completion and permission grant responses
             _ = try await Wearables.shared.handleUrl(url)
           } catch let error as RegistrationError {
-            viewModel.showError(error.description)
+            viewModel.showError([
+              "Meta glasses callback failed.",
+              "",
+              "Raw: \(error.description)",
+            ].joined(separator: "\n"))
           } catch {
             viewModel.showError("Unknown error: \(error.localizedDescription)")
           }

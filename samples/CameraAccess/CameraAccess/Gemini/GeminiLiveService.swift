@@ -173,6 +173,7 @@ class GeminiLiveService: ObservableObject {
 
     let voice = GeminiConfig.voiceName.trimmingCharacters(in: .whitespacesAndNewlines)
     if !voice.isEmpty {
+      NSLog("[Gemini] Setup voice: %@", voice)
       generationConfig["speechConfig"] = [
         "voiceConfig": [
           "prebuiltVoiceConfig": [

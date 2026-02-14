@@ -3,10 +3,15 @@ import Foundation
 @MainActor
 class ToolCallRouter {
   private let bridge: OpenClawBridge
+  private let onToolFinished: ((ToolResult) -> Void)?
   private var inFlightTasks: [String: Task<Void, Never>] = [:]
 
-  init(bridge: OpenClawBridge) {
+  init(
+    bridge: OpenClawBridge,
+    onToolFinished: ((ToolResult) -> Void)? = nil
+  ) {
     self.bridge = bridge
+    self.onToolFinished = onToolFinished
   }
 
   /// Route a tool call from Gemini to OpenClaw. Calls sendResponse with the
@@ -22,6 +27,8 @@ class ToolCallRouter {
           callName, callId, String(describing: call.args))
 
     let task = Task { @MainActor in
+      defer { self.inFlightTasks.removeValue(forKey: callId) }
+
       let taskDesc = call.args["task"] as? String ?? String(describing: call.args)
       let result = await bridge.delegateTask(task: taskDesc, toolName: callName)
 
@@ -33,10 +40,10 @@ class ToolCallRouter {
       NSLog("[ToolCall] Result for %@ (id: %@): %@",
             callName, callId, String(describing: result))
 
+      self.onToolFinished?(result)
+
       let response = self.buildToolResponse(callId: callId, name: callName, result: result)
       sendResponse(response)
-
-      self.inFlightTasks.removeValue(forKey: callId)
     }
 
     inFlightTasks[callId] = task

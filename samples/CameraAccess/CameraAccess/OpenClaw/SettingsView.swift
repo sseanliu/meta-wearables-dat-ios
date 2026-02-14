@@ -6,8 +6,12 @@ struct SettingsView: View {
   @AppStorage(AppSettings.Keys.openClawHost) private var openClawHost: String = AppSettings.Defaults.openClawHost
   @AppStorage(AppSettings.Keys.openClawPort) private var openClawPort: Int = AppSettings.Defaults.openClawPort
   @AppStorage(AppSettings.Keys.openClawAgentId) private var openClawAgentId: String = AppSettings.Defaults.openClawAgentId
+  @AppStorage(AppSettings.Keys.openClawProAgentId) private var openClawProAgentId: String = AppSettings.Defaults.openClawProAgentId
   @AppStorage(AppSettings.Keys.openClawProfile) private var openClawProfile: String = AppSettings.Defaults.openClawProfile
+  @AppStorage(AppSettings.Keys.shareLocationWithJarvis) private var shareLocationWithJarvis: Bool = AppSettings.Defaults.shareLocationWithJarvis
   @AppStorage(AppSettings.Keys.geminiVoiceName) private var geminiVoiceName: String = AppSettings.Defaults.geminiVoiceName
+  @AppStorage(AppSettings.Keys.preferBluetoothAudioOutput) private var preferBluetoothAudioOutput: Bool = AppSettings.Defaults.preferBluetoothAudioOutput
+  @AppStorage(AppSettings.Keys.showVideoPreviewOnPhone) private var showVideoPreviewOnPhone: Bool = AppSettings.Defaults.showVideoPreviewOnPhone
 
   @State private var geminiApiKey: String = ""
   @State private var openClawGatewayToken: String = ""
@@ -59,6 +63,18 @@ struct SettingsView: View {
             .font(.caption)
             .foregroundColor(.secondary)
 
+          Toggle("Play AI audio on glasses (Bluetooth)", isOn: $preferBluetoothAudioOutput)
+
+          Text("Recommended for Meta Ray-Bans. If you hear echo/feedback, turn this off to play audio on your iPhone speaker.")
+            .font(.caption)
+            .foregroundColor(.secondary)
+
+          Toggle("Show video preview on phone", isOn: $showVideoPreviewOnPhone)
+
+          Text("Off is recommended. Jarvis still sees what you see; the phone just won't display your POV video.")
+            .font(.caption)
+            .foregroundColor(.secondary)
+
           Text(geminiConfigured ? "Configured" : "Not configured")
             .foregroundColor(geminiConfigured ? .green : .secondary)
         }
@@ -86,9 +102,24 @@ struct SettingsView: View {
             .textInputAutocapitalization(.never)
             .autocorrectionDisabled(true)
 
+          TextField("GPT Pro Agent Id (default: JARVIS_Guard)", text: $openClawProAgentId)
+            .textInputAutocapitalization(.never)
+            .autocorrectionDisabled(true)
+
           TextField("Profile (default)", text: $openClawProfile)
             .textInputAutocapitalization(.never)
             .autocorrectionDisabled(true)
+
+          Toggle("Share iPhone location with Jarvis", isOn: $shareLocationWithJarvis)
+            .onChange(of: shareLocationWithJarvis) { _, enabled in
+              if enabled {
+                LocationService.shared.requestAuthorizationIfNeeded()
+              }
+            }
+
+          Text("When enabled, the app appends one-shot GPS coordinates to OpenClaw tool calls only (not sent to Gemini Live).")
+            .font(.caption)
+            .foregroundColor(.secondary)
 
           VStack(alignment: .leading, spacing: 6) {
             Text("OpenClaw user")

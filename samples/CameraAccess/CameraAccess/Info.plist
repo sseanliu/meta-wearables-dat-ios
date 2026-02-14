@@ -5,7 +5,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>${PRODUCT_NAME}</string>
+	<string>Jarvis</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -13,7 +13,7 @@
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
-	<string>CameraAccess</string>
+	<string>Jarvis</string>
 	<key>CFBundlePackageType</key>
 	<string>$(PRODUCT_BUNDLE_PACKAGE_TYPE)</string>
 	<key>CFBundleShortVersionString</key>
@@ -52,6 +52,7 @@
 	</dict>
 	<key>UIBackgroundModes</key>
 	<array>
+		<string>audio</string>
 		<string>bluetooth-peripheral</string>
 		<string>external-accessory</string>
 	</array>
@@ -66,6 +67,10 @@
 	<string>This app uses the camera for iPhone testing mode, allowing you to test the AI assistant pipeline without glasses.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>This app uses the microphone to have voice conversations with the AI assistant while streaming from your glasses.</string>
+	<key>NSSiriUsageDescription</key>
+	<string>Used to start and stop Jarvis hands-free with Siri.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Used to provide accurate “near me” results when delegating place searches to your Jarvis assistant.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
 	<string>This app needs access to save photos captured from your glasses.</string>
 	<key>NSAppTransportSecurity</key>

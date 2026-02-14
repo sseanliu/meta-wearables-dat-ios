@@ -17,13 +17,38 @@ enum GeminiConfig {
 
     You do NOT have reliable long-term memory or storage. Do not claim you saved/remembered anything unless you delegated it via the tool.
 
-    You have exactly ONE tool: execute(task). This delegates to the user's Jarvis/OpenClaw assistant, which can take real actions: send messages, search the web, manage calendars/lists, create notes/docs, and interact with connected apps.
+    You have exactly ONE tool: execute(task). This delegates to the user's Jarvis/OpenClaw assistant, which can take real actions and generate files.
 
-    When the user asks for any action beyond answering a question, you MUST:
+    Jarvis (the tool executor) CAN:
+    - Create slide decks (.pptx)
+    - Create audio files (.mp3), including podcasts/briefings
+    - Create videos (.mp4)
+    - Publish podcasts to an RSS feed and host MP3s
+    - Make phone calls and have voice conversations (call the user, Nhu, or other contacts)
+    - Send Telegram messages (to the user and to Nhu) and attach files
+    - Send emails to the user's contacts (including Nhu) and attach files
+    - Search the user's contacts
+    - Take notes and save them durably (jarvis_notes), and search backups/logs in Google Drive
+    - Do “near me” / places search using the iPhone location (when enabled in Settings)
+    - Manage tasks/reminders and shopping lists
+    - Find Amazon options and generate add-to-cart links (no checkout)
+
+    If you are unsure whether Jarvis can do something, assume it can and call execute. Do not claim you can't do something unless you already tried execute and it failed.
+
+    Podcast defaults:
+    - If the user says “make me a podcast about ...” default to a 1-speaker briefing (Sally).
+    - Only do a 2-speaker/host podcast if the user explicitly asks; use Bob (male, British) + Sally (female, American).
+
+    If the user explicitly asks you to delegate to Jarvis (for example: "Jarvis, ..." or "Jarvis ask GPT Pro: ..."), treat that as a tool request and call execute.
+
+    When the user asks for any action beyond answering a question (messages, notes, creating files, lists, places, email, etc.), you MUST:
     1) Speak a brief acknowledgment first (one short sentence).
-    2) Then call execute with a clear, detailed task description including all relevant context (platform, recipients, exact text, quantities, times, links, preferences).
+    2) Then call execute with a task description that preserves the user's intent and constraints. Use this structure:
+       - Start with `USER_REQUEST_VERBATIM:` and copy the user's request text as-is (do not paraphrase away names/numbers/lengths/constraints).
+       - Then add `DETAILS:` with only what Jarvis needs to execute (platform, recipients, exact text, quantities, times, links, preferences).
+       - If vision context matters, add `VISION_FACTS:` with 3-6 short bullet facts (no raw image dumps).
 
-    For irreversible/cost-bearing/public actions (payments, bookings with fees, publishing, sending to a new recipient, etc.), ask for explicit confirmation BEFORE calling execute.
+    Do NOT ask the user to tell you how to call tools. Tool calling is your job.
 
     Family sharing marker:
     - Only include [[FAMILY]] in the execute task when the user explicitly says it's shared/family, OR you suggest sharing and the user explicitly agrees.
@@ -40,6 +65,13 @@ enum GeminiConfig {
   // Gemini Live voice (applied in the setup message under generationConfig.speechConfig).
   static var voiceName: String {
     UserDefaults.standard.string(forKey: AppSettings.Keys.geminiVoiceName) ?? AppSettings.Defaults.geminiVoiceName
+  }
+
+  // Prefer routing AI audio output to a connected Bluetooth device (glasses).
+  // Used only in glasses mode; iPhone mode still defaults to speaker to avoid echo.
+  static var preferBluetoothAudioOutput: Bool {
+    let v = UserDefaults.standard.object(forKey: AppSettings.Keys.preferBluetoothAudioOutput) as? Bool
+    return (v ?? AppSettings.Defaults.preferBluetoothAudioOutput)
   }
 
   static var openClawHost: String {
@@ -59,8 +91,17 @@ enum GeminiConfig {
     UserDefaults.standard.string(forKey: AppSettings.Keys.openClawAgentId) ?? AppSettings.Defaults.openClawAgentId
   }
 
+  static var openClawProAgentId: String {
+    UserDefaults.standard.string(forKey: AppSettings.Keys.openClawProAgentId) ?? AppSettings.Defaults.openClawProAgentId
+  }
+
   static var openClawProfile: String {
     UserDefaults.standard.string(forKey: AppSettings.Keys.openClawProfile) ?? AppSettings.Defaults.openClawProfile
+  }
+
+  static var shareLocationWithJarvis: Bool {
+    let v = UserDefaults.standard.object(forKey: AppSettings.Keys.shareLocationWithJarvis) as? Bool
+    return (v ?? AppSettings.Defaults.shareLocationWithJarvis)
   }
 
   static var openClawUser: String {

@@ -7,8 +7,11 @@ class AudioManager {
   private let audioEngine = AVAudioEngine()
   private let playerNode = AVAudioPlayerNode()
   private var isCapturing = false
+  private var suppressCaptureUntil: Date?
 
   private let outputFormat: AVAudioFormat
+
+  private let chimeFormat: AVAudioFormat
 
   // Accumulate resampled PCM into ~100ms chunks before sending
   private let sendQueue = DispatchQueue(label: "audio.accumulator")
@@ -22,22 +25,49 @@ class AudioManager {
       channels: GeminiConfig.audioChannels,
       interleaved: true
     )!
+    self.chimeFormat = AVAudioFormat(
+      commonFormat: .pcmFormatFloat32,
+      sampleRate: GeminiConfig.outputAudioSampleRate,
+      channels: GeminiConfig.audioChannels,
+      interleaved: false
+    )!
   }
 
-  func setupAudioSession(useIPhoneMode: Bool = false) throws {
+  func setupAudioSession(useIPhoneMode: Bool = false, preferBluetoothOutput: Bool = false) throws {
     let session = AVAudioSession.sharedInstance()
     // iPhone mode: voiceChat for aggressive echo cancellation (mic + speaker co-located)
     // Glasses mode: videoChat for mild AEC (mic is on glasses, speaker is on phone)
-    let mode: AVAudioSession.Mode = useIPhoneMode ? .voiceChat : .videoChat
-    try session.setCategory(
-      .playAndRecord,
-      mode: mode,
-      options: [.defaultToSpeaker, .allowBluetooth]
-    )
+    let mode: AVAudioSession.Mode
+    if useIPhoneMode {
+      mode = .voiceChat
+    } else {
+      // If we route output to the same device as the mic (glasses), we want stronger AEC.
+      mode = preferBluetoothOutput ? .voiceChat : .videoChat
+    }
+
+    // Always avoid the iPhone receiver route (quiet). If a Bluetooth route is available,
+    // iOS can still select it; this only affects the fallback route.
+    let options: AVAudioSession.CategoryOptions = [.allowBluetoothHFP, .defaultToSpeaker]
+
+    try session.setCategory(.playAndRecord, mode: mode, options: options)
+
+    // Force speaker only when explicitly not preferring Bluetooth output.
+    if preferBluetoothOutput {
+      try? session.overrideOutputAudioPort(.none)
+    } else {
+      try? session.overrideOutputAudioPort(.speaker)
+    }
+
     try session.setPreferredSampleRate(GeminiConfig.inputAudioSampleRate)
     try session.setPreferredIOBufferDuration(0.064)
     try session.setActive(true)
-    NSLog("[Audio] Session mode: %@", useIPhoneMode ? "voiceChat (iPhone)" : "videoChat (glasses)")
+    let inName = session.currentRoute.inputs.first?.portName ?? "?"
+    let outName = session.currentRoute.outputs.first?.portName ?? "?"
+    NSLog("[Audio] Session mode: %@ preferBluetooth=%@ route_in=%@ route_out=%@",
+          useIPhoneMode ? "voiceChat (iPhone)" : (preferBluetoothOutput ? "voiceChat (glasses)" : "videoChat (glasses)"),
+          preferBluetoothOutput ? "YES" : "NO",
+          inName,
+          outName)
   }
 
   func startCapture() throws {
@@ -86,7 +116,6 @@ class AudioManager {
 
       tapCount += 1
       let pcmData: Data
-      let rms: Float
 
       if let converter {
         let resampleFormat = AVAudioFormat(
@@ -100,10 +129,8 @@ class AudioManager {
           return
         }
         pcmData = self.float32BufferToInt16Data(resampled)
-        rms = self.computeRMS(resampled)
       } else {
         pcmData = self.float32BufferToInt16Data(buffer)
-        rms = self.computeRMS(buffer)
       }
 
       // Log first 3 taps, then every ~2 seconds (every 8th tap at 4096 frames/16kHz = ~256ms each)
@@ -114,6 +141,13 @@ class AudioManager {
 
       // Accumulate into ~100ms chunks before sending to Gemini
       self.sendQueue.async {
+        if let until = self.suppressCaptureUntil, Date() < until {
+          // Drop mic audio briefly while we play a UI chime so it doesn't get
+          // sent to Gemini as user input.
+          self.accumulatedData = Data()
+          return
+        }
+
         self.accumulatedData.append(pcmData)
         if self.accumulatedData.count >= self.minSendBytes {
           let chunk = self.accumulatedData
@@ -127,7 +161,18 @@ class AudioManager {
       }
     }
 
-    try audioEngine.start()
+    do {
+      try audioEngine.start()
+    } catch {
+      // If capture setup fails, clean up and release audio session so the user can
+      // keep using the glasses for calls/music.
+      audioEngine.inputNode.removeTap(onBus: 0)
+      playerNode.stop()
+      audioEngine.stop()
+      audioEngine.detach(playerNode)
+      deactivateAudioSession()
+      throw error
+    }
     playerNode.play()
     isCapturing = true
   }
@@ -174,6 +219,7 @@ class AudioManager {
     audioEngine.stop()
     audioEngine.detach(playerNode)
     isCapturing = false
+    deactivateAudioSession()
     // Flush any remaining accumulated audio
     sendQueue.async {
       if !self.accumulatedData.isEmpty {
@@ -184,7 +230,76 @@ class AudioManager {
     }
   }
 
+  func playChime() {
+    // Play a short, subtle "meditation bell" style chime to indicate task completion.
+    guard isCapturing else { return }
+
+    let sampleRate = chimeFormat.sampleRate
+    let channels = Int(chimeFormat.channelCount)
+    guard channels == 1 else { return }
+
+    let durationSec: Double = 0.65
+    let frames = AVAudioFrameCount(max(1, Int(sampleRate * durationSec)))
+    guard let buffer = AVAudioPCMBuffer(pcmFormat: chimeFormat, frameCapacity: frames) else { return }
+    buffer.frameLength = frames
+    guard let data = buffer.floatChannelData else { return }
+
+    sendQueue.async {
+      self.suppressCaptureUntil = Date().addingTimeInterval(durationSec + 0.15)
+      self.accumulatedData = Data()
+    }
+
+    let baseHz: Double = 528.0
+    // A few (mostly inharmonic) partials with different decay constants.
+    let partials: [(freqHz: Double, decaySec: Double, amp: Double)] = [
+      (baseHz * 1.00, 0.90, 0.10),
+      (baseHz * 1.20, 0.75, 0.07),
+      (baseHz * 1.50, 0.65, 0.06),
+      (baseHz * 2.00, 0.50, 0.04),
+      (baseHz * 2.70, 0.40, 0.03),
+    ]
+
+    let n = Int(frames)
+    let attackSec: Double = 0.010
+    let attackFrames = max(1, Int(sampleRate * attackSec))
+    let endFadeSec: Double = 0.020
+    let endFadeFrames = max(1, Int(sampleRate * endFadeSec))
+
+    for i in 0..<n {
+      let t = Double(i) / sampleRate
+
+      // Attack and end fade (avoid clicks).
+      let attack = min(1.0, Double(i) / Double(attackFrames))
+      let tail = max(0.0, min(1.0, Double(n - i - 1) / Double(endFadeFrames)))
+      let envEdge = min(attack, tail)
+
+      var v: Double = 0.0
+      for p in partials {
+        let env = exp(-t / max(0.05, p.decaySec))
+        v += p.amp * sin(2.0 * Double.pi * p.freqHz * t) * env
+      }
+
+      // Keep it subtle.
+      let sample = max(-1.0, min(1.0, v * 0.85 * envEdge))
+      data[0][i] = Float(sample)
+    }
+
+    playerNode.scheduleBuffer(buffer)
+    if !playerNode.isPlaying {
+      playerNode.play()
+    }
+  }
+
   // MARK: - Private helpers
+
+  func deactivateAudioSession() {
+    // Release audio route so calls/music can resume on the glasses.
+    do {
+      try AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+    } catch {
+      NSLog("[Audio] Failed to deactivate audio session: %@", error.localizedDescription)
+    }
+  }
 
   private func computeRMS(_ buffer: AVAudioPCMBuffer) -> Float {
     let frameCount = Int(buffer.frameLength)

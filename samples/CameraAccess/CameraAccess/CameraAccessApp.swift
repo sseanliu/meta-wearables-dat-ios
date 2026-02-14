@@ -16,6 +16,7 @@
 //
 
 import Foundation
+import AppIntents
 import MWDATCore
 import SwiftUI
 
@@ -33,6 +34,9 @@ struct CameraAccessApp: App {
   @StateObject private var wearablesViewModel: WearablesViewModel
 
   init() {
+    // Ensure App Shortcuts metadata/parameters are registered with the system early.
+    JarvisShortcuts.updateAppShortcutParameters()
+
     do {
       try Wearables.configure()
     } catch {

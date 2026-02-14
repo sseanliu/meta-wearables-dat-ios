@@ -38,6 +38,8 @@ class StreamSessionViewModel: ObservableObject {
   @Published var errorMessage: String = ""
   @Published var hasActiveDevice: Bool = false
   @Published var streamingMode: StreamingMode = .glasses
+  // Used by the UI to avoid re-auto-starting after the user explicitly stops/deactivates.
+  @Published var allowAutoStart: Bool = true
 
   var isStreaming: Bool {
     streamingStatus != .stopped
@@ -132,6 +134,7 @@ class StreamSessionViewModel: ObservableObject {
   }
 
   func handleStartStreaming() async {
+    allowAutoStart = false
     let permission = Permission.camera
     do {
       let status = try await wearables.checkPermissionStatus(permission)
@@ -159,7 +162,10 @@ class StreamSessionViewModel: ObservableObject {
     showError = true
   }
 
-  func stopSession() async {
+  func stopSession(userInitiated: Bool = false) async {
+    if userInitiated {
+      allowAutoStart = false
+    }
     if streamingMode == .iPhone {
       stopIPhoneSession()
       return
@@ -170,6 +176,7 @@ class StreamSessionViewModel: ObservableObject {
   // MARK: - iPhone Camera Mode
 
   func handleStartIPhone() async {
+    allowAutoStart = false
     let granted = await IPhoneCameraManager.requestPermission()
     if granted {
       startIPhoneSession()

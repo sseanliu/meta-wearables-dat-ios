@@ -114,7 +114,7 @@ class WearablesViewModel: ObservableObject {
       do {
         try await wearables.startRegistration()
       } catch let error as RegistrationError {
-        showError(error.description)
+        showError(messageForRegistrationError(error))
       } catch {
         showError(error.localizedDescription)
       }
@@ -130,6 +130,45 @@ class WearablesViewModel: ObservableObject {
       } catch {
         showError(error.localizedDescription)
       }
+    }
+  }
+
+  private func messageForRegistrationError(_ error: RegistrationError) -> String {
+    // The DAT SDK often surfaces configuration/entitlement issues as "Internal error".
+    // Make the common fixes obvious so the user can self-serve without needing logs.
+    switch error {
+    case .configurationInvalid:
+      return [
+        "Meta glasses registration failed (configuration invalid).",
+        "",
+        "Most common fixes:",
+        "1) In the Meta AI app, enable Developer Mode for your glasses.",
+        "2) Ensure the Meta AI app is installed and you're signed in.",
+        "3) Ensure iPhone has network access (Wi-Fi/cellular).",
+        "",
+        "If you are NOT using Developer Mode, this app must be registered in the Wearables Developer Center and you must set META_APP_ID + CLIENT_TOKEN in Xcode build settings.",
+        "",
+        "Raw: \(error.description)",
+      ].joined(separator: "\n")
+    case .metaAINotInstalled:
+      return "Meta AI app not installed. Install it from the App Store, pair your glasses there, then try again.\n\nRaw: \(error.description)"
+    case .networkUnavailable:
+      return "Network unavailable. Connect your iPhone to Wi-Fi/cellular and try again.\n\nRaw: \(error.description)"
+    case .alreadyRegistered:
+      return "Glasses are already connected. If streaming doesn't work, try Disconnect then Connect again.\n\nRaw: \(error.description)"
+    case .unknown:
+      return [
+        "Meta glasses registration failed (unknown).",
+        "",
+        "Try:",
+        "1) Enable Developer Mode in Meta AI app.",
+        "2) Close and reopen both apps.",
+        "3) Disconnect then Connect again.",
+        "",
+        "Raw: \(error.description)",
+      ].joined(separator: "\n")
+    @unknown default:
+      return "Meta glasses registration failed: \(error.description)"
     }
   }
 

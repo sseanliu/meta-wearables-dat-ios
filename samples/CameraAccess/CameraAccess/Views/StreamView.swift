@@ -22,6 +22,8 @@ struct StreamView: View {
   @ObservedObject var wearablesVM: WearablesViewModel
   @ObservedObject var geminiVM: GeminiSessionViewModel
   @State private var showSettings: Bool = false
+  @State private var voiceNameWhenOpeningSettings: String = ""
+  @AppStorage(AppSettings.Keys.showVideoPreviewOnPhone) private var showVideoPreviewOnPhone: Bool = AppSettings.Defaults.showVideoPreviewOnPhone
 
   var body: some View {
     ZStack {
@@ -30,19 +32,21 @@ struct StreamView: View {
         .edgesIgnoringSafeArea(.all)
 
       // Video backdrop
-      if let videoFrame = viewModel.currentVideoFrame, viewModel.hasReceivedFirstFrame {
-        GeometryReader { geometry in
-          Image(uiImage: videoFrame)
-            .resizable()
-            .aspectRatio(contentMode: .fill)
-            .frame(width: geometry.size.width, height: geometry.size.height)
-            .clipped()
+      if showVideoPreviewOnPhone {
+        if let videoFrame = viewModel.currentVideoFrame, viewModel.hasReceivedFirstFrame {
+          GeometryReader { geometry in
+            Image(uiImage: videoFrame)
+              .resizable()
+              .aspectRatio(contentMode: .fill)
+              .frame(width: geometry.size.width, height: geometry.size.height)
+              .clipped()
+          }
+          .edgesIgnoringSafeArea(.all)
+        } else {
+          ProgressView()
+            .scaleEffect(1.5)
+            .foregroundColor(.white)
         }
-        .edgesIgnoringSafeArea(.all)
-      } else {
-        ProgressView()
-          .scaleEffect(1.5)
-          .foregroundColor(.white)
       }
 
       // Gemini status overlay (top) + speaking indicator
@@ -92,6 +96,8 @@ struct StreamView: View {
           Spacer()
           Menu {
             Button("Settings") {
+              // Used to detect changes and refresh Gemini with new runtime settings.
+              voiceNameWhenOpeningSettings = GeminiConfig.voiceName
               showSettings = true
             }
             Button("Disconnect", role: .destructive) {
@@ -140,7 +146,19 @@ struct StreamView: View {
     } message: {
       Text(geminiVM.errorMessage ?? "")
     }
-    .sheet(isPresented: $showSettings) {
+    .sheet(isPresented: $showSettings, onDismiss: {
+      // Gemini applies voice selection only during the initial setup message,
+      // so we restart the session when voice changes.
+      let oldVoice = voiceNameWhenOpeningSettings.trimmingCharacters(in: .whitespacesAndNewlines)
+      let newVoice = GeminiConfig.voiceName.trimmingCharacters(in: .whitespacesAndNewlines)
+      guard !oldVoice.isEmpty, oldVoice != newVoice else { return }
+      guard geminiVM.isGeminiActive else { return }
+
+      Task { @MainActor in
+        geminiVM.stopSession()
+        await geminiVM.startSession()
+      }
+    }) {
       SettingsView()
     }
   }
@@ -160,7 +178,11 @@ struct ControlsView: View {
         isDisabled: false
       ) {
         Task {
-          await viewModel.stopSession()
+          // If the user is done, stop AI first so audio route is released (calls/music resume).
+          if geminiVM.isGeminiActive {
+            geminiVM.stopSession()
+          }
+          await viewModel.stopSession(userInitiated: true)
         }
       }
 

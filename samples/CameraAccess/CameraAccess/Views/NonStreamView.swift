@@ -19,8 +19,10 @@ import SwiftUI
 struct NonStreamView: View {
   @ObservedObject var viewModel: StreamSessionViewModel
   @ObservedObject var wearablesVM: WearablesViewModel
+  @ObservedObject var geminiVM: GeminiSessionViewModel
   @State private var sheetHeight: CGFloat = 300
   @State private var showSettings: Bool = false
+  @State private var isStartingAI: Bool = false
 
   var body: some View {
     ZStack {
@@ -75,41 +77,47 @@ struct NonStreamView: View {
 
         Spacer()
 
-        HStack(spacing: 8) {
-          Image(systemName: "hourglass")
-            .resizable()
-            .aspectRatio(contentMode: .fit)
-            .foregroundColor(.white.opacity(0.7))
-            .frame(width: 16, height: 16)
+        if !viewModel.hasActiveDevice {
+          HStack(spacing: 8) {
+            Image(systemName: "hourglass")
+              .resizable()
+              .aspectRatio(contentMode: .fit)
+              .foregroundColor(.white.opacity(0.7))
+              .frame(width: 16, height: 16)
 
-          Text("Waiting for an active device")
-            .font(.system(size: 14))
-            .foregroundColor(.white.opacity(0.7))
+            Text("Waiting for an active device")
+              .font(.system(size: 14))
+              .foregroundColor(.white.opacity(0.7))
+          }
+          .padding(.bottom, 12)
         }
-        .padding(.bottom, 12)
-        .opacity(viewModel.hasActiveDevice ? 0 : 1)
 
         CustomButton(
-          title: "Start on iPhone",
+          title: isStartingAI ? "Starting..." : "Start AI on iPhone",
           style: .secondary,
-          isDisabled: false
+          isDisabled: isStartingAI
         ) {
-          Task {
-            await viewModel.handleStartIPhone()
-          }
+          Task { await startAIOnIPhone() }
         }
 
         CustomButton(
-          title: "Start streaming",
+          title: isStartingAI ? "Starting..." : "Start AI with Glasses",
           style: .primary,
-          isDisabled: !viewModel.hasActiveDevice
+          isDisabled: isStartingAI || !viewModel.hasActiveDevice
         ) {
-          Task {
-            await viewModel.handleStartStreaming()
-          }
+          Task { await startAIWithGlasses() }
         }
       }
       .padding(.all, 24)
+    }
+    .onAppear {
+      maybeAutoStart()
+    }
+    .onChange(of: viewModel.hasActiveDevice) { _, _ in
+      maybeAutoStart()
+    }
+    .onChange(of: wearablesVM.registrationState) { _, _ in
+      maybeAutoStart()
     }
     .sheet(isPresented: $showSettings) {
       SettingsView()
@@ -123,6 +131,40 @@ struct NonStreamView: View {
         GettingStartedSheetView(height: $sheetHeight)
       }
     }
+  }
+
+  private func startAIOnIPhone() async {
+    guard !isStartingAI else { return }
+    isStartingAI = true
+    defer { isStartingAI = false }
+
+    await viewModel.handleStartIPhone()
+    geminiVM.streamingMode = .iPhone
+    await geminiVM.startSession()
+  }
+
+  private func startAIWithGlasses() async {
+    guard !isStartingAI else { return }
+    isStartingAI = true
+    defer { isStartingAI = false }
+
+    await viewModel.handleStartStreaming()
+    geminiVM.streamingMode = .glasses
+    await geminiVM.startSession()
+  }
+
+  private func maybeAutoStart() {
+    let forceAutoStart = UserDefaults.standard.bool(forKey: AppSettings.Keys.forceAutoStartOnce)
+    // Only auto-start when explicitly requested (Siri / Shortcuts "Start Jarvis").
+    // We do NOT auto-start just because glasses connect or become active.
+    guard forceAutoStart else { return }
+    guard !isStartingAI else { return }
+    guard wearablesVM.registrationState == .registered else { return }
+    guard viewModel.hasActiveDevice else { return }
+
+    // One-shot override.
+    UserDefaults.standard.set(false, forKey: AppSettings.Keys.forceAutoStartOnce)
+    Task { await startAIWithGlasses() }
   }
 }
 
@@ -139,7 +181,7 @@ struct GettingStartedSheetView: View {
       VStack(spacing: 12) {
         TipItemView(
           resource: .videoIcon,
-          text: "First, Camera Access needs permission to use your glasses camera."
+          text: "First, Jarvis needs permission to use your glasses camera."
         )
         TipItemView(
           resource: .tapIcon,

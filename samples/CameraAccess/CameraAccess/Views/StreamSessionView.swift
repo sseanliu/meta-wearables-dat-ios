@@ -13,6 +13,7 @@
 
 import MWDATCore
 import SwiftUI
+import UIKit
 
 struct StreamSessionView: View {
   let wearables: WearablesInterface
@@ -33,15 +34,34 @@ struct StreamSessionView: View {
         StreamView(viewModel: viewModel, wearablesVM: wearablesViewModel, geminiVM: geminiVM)
       } else {
         // Pre-streaming setup view with permissions and start button
-        NonStreamView(viewModel: viewModel, wearablesVM: wearablesViewModel)
+        NonStreamView(viewModel: viewModel, wearablesVM: wearablesViewModel, geminiVM: geminiVM)
       }
     }
     .task {
       viewModel.geminiSessionVM = geminiVM
       geminiVM.streamingMode = viewModel.streamingMode
     }
-    .onChange(of: viewModel.streamingMode) { newMode in
+    .onChange(of: viewModel.streamingMode) { _, newMode in
       geminiVM.streamingMode = newMode
+    }
+    .onChange(of: geminiVM.deactivateRequested) { _, requested in
+      guard requested else { return }
+      Task { @MainActor in
+        if viewModel.streamingStatus != .stopped {
+          await viewModel.stopSession(userInitiated: true)
+        }
+        geminiVM.deactivateRequested = false
+        closeAppAfterDeactivation()
+      }
+    }
+    .onReceive(NotificationCenter.default.publisher(for: .jarvisStopRequested)) { _ in
+      Task { @MainActor in
+        if viewModel.streamingStatus != .stopped {
+          await viewModel.stopSession(userInitiated: true)
+        }
+        geminiVM.stopSession()
+        closeAppAfterDeactivation()
+      }
     }
     .alert("Error", isPresented: $viewModel.showError) {
       Button("OK") {
@@ -49,6 +69,17 @@ struct StreamSessionView: View {
       }
     } message: {
       Text(viewModel.errorMessage)
+    }
+  }
+
+  private func closeAppAfterDeactivation() {
+    // iOS doesn't provide a public "quit app" API. For this dev-signed, on-device build,
+    // we suspend (home screen) and then terminate so Siri can relaunch cleanly.
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+      UIApplication.shared.perform(#selector(NSXPCConnection.suspend))
+      DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+        exit(0)
+      }
     }
   }
 }

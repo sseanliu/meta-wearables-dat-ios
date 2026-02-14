@@ -19,6 +19,21 @@ struct GeminiStatusBar: View {
       .background(Color.black.opacity(0.6))
       .cornerRadius(16)
 
+      if !geminiVM.audioRouteLabel.isEmpty {
+        HStack(spacing: 6) {
+          Image(systemName: "airpods")
+            .font(.system(size: 12, weight: .medium))
+            .foregroundColor(.white.opacity(0.9))
+          Text(geminiVM.audioRouteLabel)
+            .font(.system(size: 12, weight: .medium))
+            .foregroundColor(.white.opacity(0.9))
+            .lineLimit(1)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+        .background(Color.black.opacity(0.45))
+        .cornerRadius(16)
+      }
     }
   }
 
