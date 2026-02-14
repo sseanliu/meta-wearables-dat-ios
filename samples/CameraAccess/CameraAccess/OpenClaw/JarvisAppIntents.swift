@@ -47,6 +47,7 @@ struct JarvisShortcuts: AppShortcutsProvider {
         "Start \(.applicationName)",
         "Activate \(.applicationName)",
         "Open \(.applicationName)",
+        "Launch \(.applicationName)",
       ],
       shortTitle: "Start Jarvis",
       systemImageName: "sparkles"

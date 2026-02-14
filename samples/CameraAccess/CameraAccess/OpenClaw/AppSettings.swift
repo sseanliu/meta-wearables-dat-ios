@@ -28,6 +28,9 @@ enum AppSettings {
     // - Auto-start is intentionally OFF: Jarvis should only launch when explicitly requested (Siri or a tap).
     // - Hiding the preview keeps the phone usable in-pocket without showing POV video.
     static let autoStartWithGlasses = false
+    // When enabled, opening the app will auto-connect glasses (if needed) and start
+    // the glasses AI experience as soon as a device is active.
+    static let autoStartOnAppOpen = true
     static let showVideoPreviewOnPhone = false
 
     // When enabled, saying "Jarvis stop/deactivate" will end the glasses experience and
@@ -45,6 +48,7 @@ enum AppSettings {
     static let geminiVoiceName = "visionclaw.gemini.voice_name"
     static let preferBluetoothAudioOutput = "visionclaw.audio.prefer_bluetooth_output"
     static let autoStartWithGlasses = "visionclaw.glasses.auto_start_ai"
+    static let autoStartOnAppOpen = "visionclaw.glasses.auto_start_on_app_open"
     static let showVideoPreviewOnPhone = "visionclaw.ui.show_video_preview"
     static let closeAppOnDeactivate = "visionclaw.ui.close_on_deactivate"
 

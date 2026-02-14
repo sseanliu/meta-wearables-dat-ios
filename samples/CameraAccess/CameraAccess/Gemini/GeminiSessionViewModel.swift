@@ -1,6 +1,7 @@
 import AVFoundation
 import Foundation
 import SwiftUI
+import UIKit
 
 @MainActor
 class GeminiSessionViewModel: ObservableObject {
@@ -21,6 +22,7 @@ class GeminiSessionViewModel: ObservableObject {
   private var stateObservation: Task<Void, Never>?
   private var audioInterruptionObserver: NSObjectProtocol?
   private var audioRouteObserver: NSObjectProtocol?
+  private var disconnectRetryCount: Int = 0
 
   var streamingMode: StreamingMode = .glasses
 
@@ -34,11 +36,17 @@ class GeminiSessionViewModel: ObservableObject {
 
     isGeminiActive = true
     deactivateRequested = false
+    disconnectRetryCount = 0
 
     // Wire audio callbacks
     audioManager.onAudioCaptured = { [weak self] data in
       guard let self else { return }
       Task { @MainActor in
+        // During tool execution, Gemini is waiting on a toolResponse.
+        // Continuing to send realtime audio/video while a tool call is pending can
+        // cause the session to become unstable (server-side 1011 disconnects).
+        if self.openClawBridge.lastToolCallStatus.isActive { return }
+
         // Mute mic while the model speaks to prevent echo/feedback.
         // iPhone mode: loudspeaker + co-located mic overwhelms iOS echo cancellation.
         // Glasses mode: only gate when we route output to the same headset as the mic.
@@ -86,8 +94,23 @@ class GeminiSessionViewModel: ObservableObject {
       guard let self else { return }
       Task { @MainActor in
         guard self.isGeminiActive else { return }
+        let r = reason ?? "Unknown error"
+
+        // Gemini Live preview models can occasionally close with server-side 1011 errors.
+        // Do a single fast retry to avoid "random" drops; if it happens again, surface the error.
+        if r.contains("code 1011"),
+           self.disconnectRetryCount < 1,
+           UIApplication.shared.applicationState == .active {
+          self.disconnectRetryCount += 1
+          NSLog("[Gemini] Disconnected (%@); retrying once...", r)
+          self.stopSession()
+          try? await Task.sleep(nanoseconds: 800_000_000)
+          await self.startSession()
+          return
+        }
+
         self.stopSession()
-        self.errorMessage = "Connection lost: \(reason ?? "Unknown error")"
+        self.errorMessage = "Connection lost: \(r)"
       }
     }
 
@@ -201,6 +224,8 @@ class GeminiSessionViewModel: ObservableObject {
 
   func sendVideoFrameIfThrottled(image: UIImage) {
     guard isGeminiActive, connectionState == .ready else { return }
+    // See comment in onAudioCaptured: don't stream frames while Gemini is waiting on a tool.
+    guard !openClawBridge.lastToolCallStatus.isActive else { return }
     let now = Date()
     guard now.timeIntervalSince(lastVideoFrameTime) >= GeminiConfig.videoFrameInterval else { return }
     lastVideoFrameTime = now

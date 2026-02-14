@@ -20,6 +20,7 @@ struct StreamSessionView: View {
   @ObservedObject private var wearablesViewModel: WearablesViewModel
   @StateObject private var viewModel: StreamSessionViewModel
   @StateObject private var geminiVM = GeminiSessionViewModel()
+  @Environment(\.scenePhase) private var scenePhase
 
   init(wearables: WearablesInterface, wearablesVM: WearablesViewModel) {
     self.wearables = wearables
@@ -54,6 +55,19 @@ struct StreamSessionView: View {
         closeAppAfterDeactivation()
       }
     }
+    .onChange(of: scenePhase) { _, phase in
+      // If the user leaves the app (or Meta AI briefly takes foreground during registration),
+      // release audio/camera resources so normal glasses behavior (calls/music/Meta AI) stays snappy.
+      guard phase != .active else { return }
+      Task { @MainActor in
+        if viewModel.streamingStatus != .stopped {
+          await viewModel.stopSession(userInitiated: true)
+        }
+        if geminiVM.isGeminiActive {
+          geminiVM.stopSession()
+        }
+      }
+    }
     .onReceive(NotificationCenter.default.publisher(for: .jarvisStopRequested)) { _ in
       Task { @MainActor in
         if viewModel.streamingStatus != .stopped {
@@ -75,11 +89,12 @@ struct StreamSessionView: View {
   private func closeAppAfterDeactivation() {
     // iOS doesn't provide a public "quit app" API. For this dev-signed, on-device build,
     // we suspend (home screen) and then terminate so Siri can relaunch cleanly.
-    DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+    //
+    // Important: if we delay too long after suspending, iOS may suspend the process
+    // before our `exit(0)` runs, leaving the app "minimized but still running".
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
       UIApplication.shared.perform(#selector(NSXPCConnection.suspend))
-      DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
-        exit(0)
-      }
+      exit(0)
     }
   }
 }

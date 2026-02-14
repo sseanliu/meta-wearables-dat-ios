@@ -34,6 +34,32 @@ class OpenClawBridge: ObservableObject {
     return "visionclaw:\(AppSettings.deviceId()):\(agentPart):\(ts)"
   }
 
+  private static func clampToolResponseText(_ input: String) -> String {
+    let s = input.trimmingCharacters(in: .whitespacesAndNewlines)
+    // Keep tool responses short. Gemini Live tool responses are best as concise
+    // summaries plus key links; long payloads can destabilize sessions.
+    let maxChars = 1800
+    if s.count <= maxChars { return s }
+
+    let prefix = String(s.prefix(maxChars))
+
+    // Try to keep any URLs (RSS/MP3 links) in the truncated output.
+    let pattern = "(https?://[^\\s)\\]}>\"']+)"
+    let regex = try? NSRegularExpression(pattern: pattern, options: [])
+    let matches = regex?.matches(in: s, options: [], range: NSRange(location: 0, length: (s as NSString).length)) ?? []
+    var urls: [String] = []
+    for m in matches.prefix(6) {
+      let u = (s as NSString).substring(with: m.range(at: 1))
+      if !urls.contains(u) { urls.append(u) }
+    }
+
+    var out = prefix + "\n\n(Truncated for voice.)"
+    if !urls.isEmpty {
+      out += "\nKey links:\n" + urls.map { "- \($0)" }.joined(separator: "\n")
+    }
+    return out
+  }
+
   // MARK: - Agent Chat (session continuity via x-openclaw-session-key header)
 
   func delegateTask(
@@ -108,6 +134,15 @@ class OpenClawBridge: ObservableObject {
     [/device_time]
     """
 
+    // Nudge Jarvis to respond concisely for tool-return-to-voice.
+    effectiveTask += """
+
+    [tool_response_constraints]
+    - Return a concise tool response suitable for speaking aloud (prefer <= 600 characters; hard max 1800).
+    - Include only final outcomes and links (RSS/MP3/etc). Do NOT include full scripts, transcripts, or long logs.
+    [/tool_response_constraints]
+    """
+
     let model = agentIdForRequest.isEmpty ? "openclaw" : "openclaw:\(agentIdForRequest)"
     let body: [String: Any] = [
       "model": model,
@@ -136,15 +171,17 @@ class OpenClawBridge: ObservableObject {
          let first = choices.first,
          let message = first["message"] as? [String: Any],
          let content = message["content"] as? String {
-        NSLog("[OpenClaw] Agent result: %@", String(content.prefix(200)))
+        let clamped = OpenClawBridge.clampToolResponseText(content)
+        NSLog("[OpenClaw] Agent result: %@", String(clamped.prefix(200)))
         lastToolCallStatus = .completed(toolName)
-        return .success(content)
+        return .success(clamped)
       }
 
       let raw = String(data: data, encoding: .utf8) ?? "OK"
-      NSLog("[OpenClaw] Agent raw: %@", String(raw.prefix(200)))
+      let clamped = OpenClawBridge.clampToolResponseText(raw)
+      NSLog("[OpenClaw] Agent raw: %@", String(clamped.prefix(200)))
       lastToolCallStatus = .completed(toolName)
-      return .success(raw)
+      return .success(clamped)
     } catch is CancellationError {
       lastToolCallStatus = .cancelled(toolName)
       return .failure("Cancelled")

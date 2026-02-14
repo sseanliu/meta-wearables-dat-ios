@@ -12,6 +12,7 @@ struct SettingsView: View {
   @AppStorage(AppSettings.Keys.geminiVoiceName) private var geminiVoiceName: String = AppSettings.Defaults.geminiVoiceName
   @AppStorage(AppSettings.Keys.preferBluetoothAudioOutput) private var preferBluetoothAudioOutput: Bool = AppSettings.Defaults.preferBluetoothAudioOutput
   @AppStorage(AppSettings.Keys.showVideoPreviewOnPhone) private var showVideoPreviewOnPhone: Bool = AppSettings.Defaults.showVideoPreviewOnPhone
+  @AppStorage(AppSettings.Keys.autoStartOnAppOpen) private var autoStartOnAppOpen: Bool = AppSettings.Defaults.autoStartOnAppOpen
 
   @State private var geminiApiKey: String = ""
   @State private var openClawGatewayToken: String = ""
@@ -72,6 +73,12 @@ struct SettingsView: View {
           Toggle("Show video preview on phone", isOn: $showVideoPreviewOnPhone)
 
           Text("Off is recommended. Jarvis still sees what you see; the phone just won't display your POV video.")
+            .font(.caption)
+            .foregroundColor(.secondary)
+
+          Toggle("Auto-start glasses experience on app open", isOn: $autoStartOnAppOpen)
+
+          Text("Recommended. When you open Jarvis (including via Siri), it will connect glasses (if needed) and start AI as soon as the glasses are active.")
             .font(.caption)
             .foregroundColor(.secondary)
 

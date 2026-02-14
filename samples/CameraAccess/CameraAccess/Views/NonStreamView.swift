@@ -15,14 +15,17 @@
 
 import MWDATCore
 import SwiftUI
+import UIKit
 
 struct NonStreamView: View {
   @ObservedObject var viewModel: StreamSessionViewModel
   @ObservedObject var wearablesVM: WearablesViewModel
   @ObservedObject var geminiVM: GeminiSessionViewModel
+  @Environment(\.scenePhase) private var scenePhase
   @State private var sheetHeight: CGFloat = 300
   @State private var showSettings: Bool = false
   @State private var isStartingAI: Bool = false
+  @State private var requestedAutoRegistration: Bool = false
 
   var body: some View {
     ZStack {
@@ -113,6 +116,10 @@ struct NonStreamView: View {
     .onAppear {
       maybeAutoStart()
     }
+    .onChange(of: scenePhase) { _, _ in
+      // Siri launch can briefly transition through inactive; retry when active.
+      maybeAutoStart()
+    }
     .onChange(of: viewModel.hasActiveDevice) { _, _ in
       maybeAutoStart()
     }
@@ -155,15 +162,38 @@ struct NonStreamView: View {
 
   private func maybeAutoStart() {
     let forceAutoStart = UserDefaults.standard.bool(forKey: AppSettings.Keys.forceAutoStartOnce)
+    let autoStartOnOpen = (UserDefaults.standard.object(forKey: AppSettings.Keys.autoStartOnAppOpen) as? Bool)
+      ?? AppSettings.Defaults.autoStartOnAppOpen
+
+    // Always allow explicit Siri one-shot start. Optionally auto-start whenever the app opens.
+    let shouldAutoStart = forceAutoStart || autoStartOnOpen
     // Only auto-start when explicitly requested (Siri / Shortcuts "Start Jarvis").
     // We do NOT auto-start just because glasses connect or become active.
-    guard forceAutoStart else { return }
+    guard shouldAutoStart else { return }
     guard !isStartingAI else { return }
-    guard wearablesVM.registrationState == .registered else { return }
+    guard viewModel.allowAutoStart else { return }
+
+    // Only start while we're in the foreground. If the Meta AI app is opened during
+    // registration, our app goes inactive/background briefly.
+    guard UIApplication.shared.applicationState == .active else { return }
+
+    // If glasses aren't registered yet, kick off registration and wait for the
+    // registration + active device signals to arrive (we'll retry via onChange handlers).
+    if wearablesVM.registrationState != .registered {
+      if !requestedAutoRegistration {
+        requestedAutoRegistration = true
+        wearablesVM.connectGlasses()
+      }
+      return
+    }
+
+    // Registered but device not active yet: wait.
     guard viewModel.hasActiveDevice else { return }
 
     // One-shot override.
-    UserDefaults.standard.set(false, forKey: AppSettings.Keys.forceAutoStartOnce)
+    if forceAutoStart {
+      UserDefaults.standard.set(false, forKey: AppSettings.Keys.forceAutoStartOnce)
+    }
     Task { await startAIWithGlasses() }
   }
 }
