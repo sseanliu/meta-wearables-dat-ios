@@ -27,7 +27,7 @@
 			<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
-				<string>cameraaccess</string>
+				<string>jarvis</string>
 			</array>
 		</dict>
 	</array>
@@ -39,7 +39,7 @@
 	<dict>
 		<key>AppLinkURLScheme</key>
 		<!-- Tell DAT your URL scheme so it can be called back from Meta AI -->
-		<string>cameraaccess://</string>
+		<string>jarvis://</string>
 		<key>MetaAppID</key>
 		<!-- Without Developer Mode, this key will need to be set with ID from the app registered in Wearables Developer Center -->
 		<string>$(META_APP_ID)</string>

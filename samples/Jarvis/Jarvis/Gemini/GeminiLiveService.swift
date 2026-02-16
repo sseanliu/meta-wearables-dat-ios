@@ -30,6 +30,7 @@ class GeminiLiveService: ObservableObject {
   private var webSocketTask: URLSessionWebSocketTask?
   private var receiveTask: Task<Void, Never>?
   private var connectContinuation: CheckedContinuation<Bool, Never>?
+  private var didEmitDisconnect: Bool = false
   private let delegate = WebSocketDelegate()
   private var urlSession: URLSession!
   private let sendQueue = DispatchQueue(label: "gemini.send", qos: .userInitiated)
@@ -47,6 +48,7 @@ class GeminiLiveService: ObservableObject {
     }
 
     connectionState = .connecting
+    didEmitDisconnect = false
 
     let result = await withCheckedContinuation { (continuation: CheckedContinuation<Bool, Never>) in
       self.connectContinuation = continuation
@@ -64,10 +66,7 @@ class GeminiLiveService: ObservableObject {
         guard let self else { return }
         let reasonStr = reason.flatMap { String(data: $0, encoding: .utf8) } ?? "no reason"
         Task { @MainActor in
-          self.resolveConnect(success: false)
-          self.connectionState = .disconnected
-          self.isModelSpeaking = false
-          self.onDisconnected?("Connection closed (code \(code.rawValue): \(reasonStr))")
+          self.emitDisconnected("Connection closed (code \(code.rawValue): \(reasonStr))")
         }
       }
 
@@ -75,10 +74,7 @@ class GeminiLiveService: ObservableObject {
         guard let self else { return }
         let msg = error?.localizedDescription ?? "Unknown error"
         Task { @MainActor in
-          self.resolveConnect(success: false)
-          self.connectionState = .error(msg)
-          self.isModelSpeaking = false
-          self.onDisconnected?(msg)
+          self.emitDisconnected(msg)
         }
       }
 
@@ -101,6 +97,7 @@ class GeminiLiveService: ObservableObject {
   }
 
   func disconnect() {
+    didEmitDisconnect = true
     receiveTask?.cancel()
     receiveTask = nil
     webSocketTask?.cancel(with: .normalClosure, reason: nil)
@@ -117,41 +114,35 @@ class GeminiLiveService: ObservableObject {
 
   func sendAudio(data: Data) {
     guard connectionState == .ready else { return }
-    sendQueue.async { [weak self] in
-      let base64 = data.base64EncodedString()
-      let json: [String: Any] = [
-        "realtimeInput": [
-          "audio": [
-            "mimeType": "audio/pcm;rate=16000",
-            "data": base64
-          ]
+    let base64 = data.base64EncodedString()
+    let json: [String: Any] = [
+      "realtimeInput": [
+        "audio": [
+          "mimeType": "audio/pcm;rate=16000",
+          "data": base64
         ]
       ]
-      self?.sendJSON(json)
-    }
+    ]
+    enqueueJSON(json)
   }
 
   func sendVideoFrame(image: UIImage) {
     guard connectionState == .ready else { return }
-    sendQueue.async { [weak self] in
-      guard let jpegData = image.jpegData(compressionQuality: GeminiConfig.videoJPEGQuality) else { return }
-      let base64 = jpegData.base64EncodedString()
-      let json: [String: Any] = [
-        "realtimeInput": [
-          "video": [
-            "mimeType": "image/jpeg",
-            "data": base64
-          ]
+    guard let jpegData = image.jpegData(compressionQuality: GeminiConfig.videoJPEGQuality) else { return }
+    let base64 = jpegData.base64EncodedString()
+    let json: [String: Any] = [
+      "realtimeInput": [
+        "video": [
+          "mimeType": "image/jpeg",
+          "data": base64
         ]
       ]
-      self?.sendJSON(json)
-    }
+    ]
+    enqueueJSON(json)
   }
 
   func sendToolResponse(_ response: [String: Any]) {
-    sendQueue.async { [weak self] in
-      self?.sendJSON(response)
-    }
+    enqueueJSON(response)
   }
 
   // MARK: - Private
@@ -161,6 +152,15 @@ class GeminiLiveService: ObservableObject {
       connectContinuation = nil
       cont.resume(returning: success)
     }
+  }
+
+  private func emitDisconnected(_ reason: String?) {
+    if didEmitDisconnect { return }
+    didEmitDisconnect = true
+    resolveConnect(success: false)
+    connectionState = .disconnected
+    isModelSpeaking = false
+    onDisconnected?(reason)
   }
 
   private func sendSetupMessage() {
@@ -212,7 +212,16 @@ class GeminiLiveService: ObservableObject {
         "outputAudioTranscription": [:] as [String: Any]
       ]
     ]
-    sendJSON(setup)
+    enqueueJSON(setup)
+  }
+
+  private func enqueueJSON(_ json: [String: Any]) {
+    sendQueue.async { [weak self] in
+      guard let self else { return }
+      Task { @MainActor [weak self] in
+        self?.sendJSON(json)
+      }
+    }
   }
 
   private func sendJSON(_ json: [String: Any]) {
@@ -244,10 +253,7 @@ class GeminiLiveService: ObservableObject {
           if !Task.isCancelled {
             let reason = error.localizedDescription
             await MainActor.run {
-              self.resolveConnect(success: false)
-              self.connectionState = .disconnected
-              self.isModelSpeaking = false
-              self.onDisconnected?(reason)
+              self.emitDisconnected(reason)
             }
           }
           break
@@ -273,9 +279,11 @@ class GeminiLiveService: ObservableObject {
     if let goAway = json["goAway"] as? [String: Any] {
       let timeLeft = goAway["timeLeft"] as? [String: Any]
       let seconds = timeLeft?["seconds"] as? Int ?? 0
-      connectionState = .disconnected
-      isModelSpeaking = false
-      onDisconnected?("Server closing (time left: \(seconds)s)")
+      webSocketTask?.cancel(with: .goingAway, reason: nil)
+      webSocketTask = nil
+      receiveTask?.cancel()
+      receiveTask = nil
+      emitDisconnected("Server closing (time left: \(seconds)s)")
       return
     }
 

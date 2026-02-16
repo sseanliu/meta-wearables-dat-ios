@@ -53,8 +53,8 @@ Gemini Live API (WebSocket)
 
 ```bash
 git clone https://github.com/sseanliu/VisionClaw.git
-cd VisionClaw/samples/CameraAccess
-open CameraAccess.xcodeproj
+cd VisionClaw/samples/Jarvis
+open Jarvis.xcodeproj
 ```
 
 ### 2. Add your Gemini API key

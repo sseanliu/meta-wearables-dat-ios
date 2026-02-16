@@ -116,16 +116,6 @@ struct StreamView: View {
       }
       .padding(.all, 24)
     }
-    .onDisappear {
-      Task {
-        if viewModel.streamingStatus != .stopped {
-          await viewModel.stopSession()
-        }
-        if geminiVM.isGeminiActive {
-          geminiVM.stopSession()
-        }
-      }
-    }
     // Show captured photos from DAT SDK in a preview sheet
     .sheet(isPresented: $viewModel.showPhotoPreview) {
       if let photo = viewModel.capturedPhoto {
@@ -173,15 +163,11 @@ struct ControlsView: View {
     // Controls row
     HStack(spacing: 8) {
       CustomButton(
-        title: "Stop streaming",
-        style: .destructive,
+        title: "Video off",
+        style: .secondary,
         isDisabled: false
       ) {
         Task {
-          // If the user is done, stop AI first so audio route is released (calls/music resume).
-          if geminiVM.isGeminiActive {
-            geminiVM.stopSession()
-          }
           await viewModel.stopSession(userInitiated: true)
         }
       }

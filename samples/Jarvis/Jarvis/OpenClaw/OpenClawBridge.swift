@@ -10,9 +10,9 @@ class OpenClawBridge: ObservableObject {
 
   init() {
     let config = URLSessionConfiguration.default
-    // OpenClaw tasks can take a while (podcasts/videos). Keep iOS-side timeouts generous,
-    // but do NOT wait indefinitely for connectivity, otherwise the UI looks "stuck forever".
-    let requestTimeoutSec: Double = 5 * 60
+    // Keep tool calls long enough for normal actions, but bounded so Gemini does not sit
+    // in a blocked tool-call state for minutes and appear "crashed".
+    let requestTimeoutSec: Double = 95
     config.timeoutIntervalForRequest = requestTimeoutSec
     config.timeoutIntervalForResource = requestTimeoutSec
     config.waitsForConnectivity = false
@@ -58,6 +58,42 @@ class OpenClawBridge: ObservableObject {
       out += "\nKey links:\n" + urls.map { "- \($0)" }.joined(separator: "\n")
     }
     return out
+  }
+
+  private static func extractAssistantContent(from json: [String: Any]) -> String? {
+    guard let choices = json["choices"] as? [[String: Any]], let first = choices.first else {
+      if let outputText = json["output_text"] as? String {
+        let s = outputText.trimmingCharacters(in: .whitespacesAndNewlines)
+        return s.isEmpty ? nil : s
+      }
+      return nil
+    }
+
+    guard let message = first["message"] as? [String: Any] else { return nil }
+
+    if let content = message["content"] as? String {
+      let s = content.trimmingCharacters(in: .whitespacesAndNewlines)
+      return s.isEmpty ? nil : s
+    }
+
+    if let contentParts = message["content"] as? [[String: Any]] {
+      let parts = contentParts.compactMap { part -> String? in
+        if let text = part["text"] as? String {
+          let s = text.trimmingCharacters(in: .whitespacesAndNewlines)
+          return s.isEmpty ? nil : s
+        }
+        if let nested = part["content"] as? String {
+          let s = nested.trimmingCharacters(in: .whitespacesAndNewlines)
+          return s.isEmpty ? nil : s
+        }
+        return nil
+      }
+      if !parts.isEmpty {
+        return parts.joined(separator: "\n")
+      }
+    }
+
+    return nil
   }
 
   // MARK: - Agent Chat (session continuity via x-openclaw-session-key header)
@@ -166,15 +202,13 @@ class OpenClawBridge: ObservableObject {
         return .failure("Agent returned HTTP \(code)")
       }
 
-      if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-         let choices = json["choices"] as? [[String: Any]],
-         let first = choices.first,
-         let message = first["message"] as? [String: Any],
-         let content = message["content"] as? String {
-        let clamped = OpenClawBridge.clampToolResponseText(content)
-        NSLog("[OpenClaw] Agent result: %@", String(clamped.prefix(200)))
-        lastToolCallStatus = .completed(toolName)
-        return .success(clamped)
+      if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+        if let content = OpenClawBridge.extractAssistantContent(from: json) {
+          let clamped = OpenClawBridge.clampToolResponseText(content)
+          NSLog("[OpenClaw] Agent result: %@", String(clamped.prefix(200)))
+          lastToolCallStatus = .completed(toolName)
+          return .success(clamped)
+        }
       }
 
       let raw = String(data: data, encoding: .utf8) ?? "OK"

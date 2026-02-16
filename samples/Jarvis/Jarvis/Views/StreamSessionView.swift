@@ -56,25 +56,58 @@ struct StreamSessionView: View {
       }
     }
     .onChange(of: scenePhase) { _, phase in
-      // If the user leaves the app (or Meta AI briefly takes foreground during registration),
-      // release audio/camera resources so normal glasses behavior (calls/music/Meta AI) stays snappy.
-      guard phase != .active else { return }
+      // Only react when the app fully enters the background.
+      // .inactive is a transient state (alerts, route changes, handoffs) and stopping there
+      // can kill an otherwise healthy session right after "video on" transitions.
+      //
+      // When NOT streaming video, we allow Gemini (audio) to continue in the background
+      // (UIBackgroundModes=audio) so "Siri start Jarvis" can run hands-free with the phone locked.
+      guard phase == .background else { return }
       Task { @MainActor in
-        if viewModel.streamingStatus != .stopped {
+        let wasStreamingVideo = (viewModel.streamingStatus != .stopped)
+        if wasStreamingVideo {
           await viewModel.stopSession(userInitiated: true)
         }
-        if geminiVM.isGeminiActive {
+        // Only stop Gemini automatically when we were streaming video (camera). Audio-only stays alive.
+        if wasStreamingVideo, geminiVM.isGeminiActive {
           geminiVM.stopSession()
         }
       }
     }
     .onReceive(NotificationCenter.default.publisher(for: .jarvisStopRequested)) { _ in
       Task { @MainActor in
+        geminiVM.cancelInFlightToolCalls()
         if viewModel.streamingStatus != .stopped {
           await viewModel.stopSession(userInitiated: true)
         }
         geminiVM.stopSession()
         closeAppAfterDeactivation()
+      }
+    }
+    .onReceive(NotificationCenter.default.publisher(for: .jarvisVideoOnRequested)) { _ in
+      Task { @MainActor in
+        geminiVM.cancelInFlightToolCalls()
+        if !geminiVM.isGeminiActive {
+          geminiVM.streamingMode = .glasses
+          await geminiVM.startSession()
+        }
+        guard wearablesViewModel.registrationState == .registered else { return }
+        guard viewModel.hasActiveDevice else { return }
+        if viewModel.streamingStatus == .stopped {
+          await viewModel.handleStartStreaming()
+        }
+      }
+    }
+    .onReceive(NotificationCenter.default.publisher(for: .jarvisVideoOffRequested)) { _ in
+      Task { @MainActor in
+        geminiVM.cancelInFlightToolCalls()
+        if viewModel.streamingStatus != .stopped {
+          await viewModel.stopSession(userInitiated: true)
+        }
+        if !geminiVM.isGeminiActive {
+          geminiVM.streamingMode = .glasses
+          await geminiVM.startSession()
+        }
       }
     }
     .alert("Error", isPresented: $viewModel.showError) {

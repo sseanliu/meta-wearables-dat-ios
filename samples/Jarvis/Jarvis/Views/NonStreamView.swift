@@ -59,24 +59,58 @@ struct NonStreamView: View {
 
         Spacer()
 
-        VStack(spacing: 12) {
-          Image(.cameraAccessIcon)
-            .resizable()
-            .renderingMode(.template)
-            .foregroundColor(.white)
-            .aspectRatio(contentMode: .fit)
-            .frame(width: 120)
+        if geminiVM.isGeminiActive {
+          VStack(spacing: 12) {
+            GeminiStatusBar(geminiVM: geminiVM)
 
-          Text("Stream Your Glasses Camera")
-            .font(.system(size: 20, weight: .semibold))
-            .foregroundColor(.white)
+            if !geminiVM.userTranscript.isEmpty || !geminiVM.aiTranscript.isEmpty {
+              TranscriptView(userText: geminiVM.userTranscript, aiText: geminiVM.aiTranscript)
+            }
 
-          Text("Tap the Start streaming button to stream video from your glasses or use the camera button to take a photo from your glasses.")
-            .font(.system(size: 15))
-            .multilineTextAlignment(.center)
-            .foregroundColor(.white)
+            ToolCallStatusView(status: geminiVM.toolCallStatus)
+
+            Text("Video: Off")
+              .font(.system(size: 14, weight: .medium))
+              .foregroundColor(.white.opacity(0.85))
+              .padding(.horizontal, 14)
+              .padding(.vertical, 8)
+              .background(Color.black.opacity(0.45))
+              .cornerRadius(16)
+
+            if geminiVM.isModelSpeaking {
+              HStack(spacing: 8) {
+                Image(systemName: "speaker.wave.2.fill")
+                  .foregroundColor(.white)
+                  .font(.system(size: 14))
+                SpeakingIndicator()
+              }
+              .padding(.horizontal, 16)
+              .padding(.vertical, 8)
+              .background(Color.black.opacity(0.5))
+              .cornerRadius(20)
+            }
+          }
+          .padding(.horizontal, 12)
+        } else {
+          VStack(spacing: 12) {
+            Image(.cameraAccessIcon)
+              .resizable()
+              .renderingMode(.template)
+              .foregroundColor(.white)
+              .aspectRatio(contentMode: .fit)
+              .frame(width: 120)
+
+            Text("Jarvis (Glasses + iPhone)")
+              .font(.system(size: 20, weight: .semibold))
+              .foregroundColor(.white)
+
+            Text("Starts in audio-only mode. Say “Jarvis video on” to enable the glasses camera when you want it.")
+              .font(.system(size: 15))
+              .multilineTextAlignment(.center)
+              .foregroundColor(.white)
+          }
+          .padding(.horizontal, 12)
         }
-        .padding(.horizontal, 12)
 
         Spacer()
 
@@ -95,20 +129,38 @@ struct NonStreamView: View {
           .padding(.bottom, 12)
         }
 
-        CustomButton(
-          title: isStartingAI ? "Starting..." : "Start AI on iPhone",
-          style: .secondary,
-          isDisabled: isStartingAI
-        ) {
-          Task { await startAIOnIPhone() }
-        }
+        if geminiVM.isGeminiActive {
+          CustomButton(
+            title: isStartingAI ? "Starting..." : "Enable Video",
+            style: .primary,
+            isDisabled: isStartingAI || !viewModel.hasActiveDevice
+          ) {
+            Task { await enableVideo() }
+          }
 
-        CustomButton(
-          title: isStartingAI ? "Starting..." : "Start AI with Glasses",
-          style: .primary,
-          isDisabled: isStartingAI || !viewModel.hasActiveDevice
-        ) {
-          Task { await startAIWithGlasses() }
+          CustomButton(
+            title: "Stop AI",
+            style: .destructive,
+            isDisabled: isStartingAI
+          ) {
+            geminiVM.stopSession()
+          }
+        } else {
+          CustomButton(
+            title: isStartingAI ? "Starting..." : "Start AI on iPhone",
+            style: .secondary,
+            isDisabled: isStartingAI
+          ) {
+            Task { await startAIOnIPhone() }
+          }
+
+          CustomButton(
+            title: isStartingAI ? "Starting..." : "Start AI with Glasses (Audio)",
+            style: .primary,
+            isDisabled: isStartingAI || !viewModel.hasActiveDevice
+          ) {
+            Task { await startAIWithGlassesAudioOnly() }
+          }
         }
       }
       .padding(.all, 24)
@@ -150,14 +202,20 @@ struct NonStreamView: View {
     await geminiVM.startSession()
   }
 
-  private func startAIWithGlasses() async {
+  private func startAIWithGlassesAudioOnly() async {
     guard !isStartingAI else { return }
     isStartingAI = true
     defer { isStartingAI = false }
 
-    await viewModel.handleStartStreaming()
+    viewModel.allowAutoStart = false
+    viewModel.streamingMode = .glasses
     geminiVM.streamingMode = .glasses
     await geminiVM.startSession()
+  }
+
+  private func enableVideo() async {
+    guard viewModel.streamingStatus == .stopped else { return }
+    await viewModel.handleStartStreaming()
   }
 
   private func maybeAutoStart() {
@@ -194,7 +252,7 @@ struct NonStreamView: View {
     if forceAutoStart {
       UserDefaults.standard.set(false, forKey: AppSettings.Keys.forceAutoStartOnce)
     }
-    Task { await startAIWithGlasses() }
+    Task { await startAIWithGlassesAudioOnly() }
   }
 }
 

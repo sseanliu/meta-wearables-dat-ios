@@ -23,6 +23,9 @@ class GeminiSessionViewModel: ObservableObject {
   private var audioInterruptionObserver: NSObjectProtocol?
   private var audioRouteObserver: NSObjectProtocol?
   private var disconnectRetryCount: Int = 0
+  private var reconnectTask: Task<Void, Never>?
+  private var lastLocalCommandKey: String?
+  private var lastLocalCommandAt: Date = .distantPast
 
   var streamingMode: StreamingMode = .glasses
 
@@ -37,6 +40,8 @@ class GeminiSessionViewModel: ObservableObject {
     isGeminiActive = true
     deactivateRequested = false
     disconnectRetryCount = 0
+    reconnectTask?.cancel()
+    reconnectTask = nil
 
     // Wire audio callbacks
     audioManager.onAudioCaptured = { [weak self] data in
@@ -96,16 +101,18 @@ class GeminiSessionViewModel: ObservableObject {
         guard self.isGeminiActive else { return }
         let r = reason ?? "Unknown error"
 
-        // Gemini Live preview models can occasionally close with server-side 1011 errors.
-        // Do a single fast retry to avoid "random" drops; if it happens again, surface the error.
-        if r.contains("code 1011"),
-           self.disconnectRetryCount < 1,
-           UIApplication.shared.applicationState == .active {
+        if self.shouldAutoRetryDisconnect(reason: r),
+           self.disconnectRetryCount < 3 {
           self.disconnectRetryCount += 1
-          NSLog("[Gemini] Disconnected (%@); retrying once...", r)
+          let attempt = self.disconnectRetryCount
+          let delayNs = self.retryDelayNanos(forAttempt: attempt)
+          NSLog("[Gemini] Disconnected (%@); retrying (%d/3) in %.1fs...", r, attempt, Double(delayNs) / 1_000_000_000.0)
           self.stopSession()
-          try? await Task.sleep(nanoseconds: 800_000_000)
-          await self.startSession()
+          self.reconnectTask?.cancel()
+          self.reconnectTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: delayNs)
+            await self.startSession()
+          }
           return
         }
 
@@ -205,6 +212,8 @@ class GeminiSessionViewModel: ObservableObject {
   }
 
   func stopSession() {
+    reconnectTask?.cancel()
+    reconnectTask = nil
     toolCallRouter?.cancelAll()
     toolCallRouter = nil
     audioManager.stopCapture()
@@ -220,6 +229,11 @@ class GeminiSessionViewModel: ObservableObject {
     toolCallStatus = .idle
     audioRouteLabel = ""
     deactivateRequested = false
+  }
+
+  func cancelInFlightToolCalls() {
+    toolCallRouter?.cancelAll()
+    openClawBridge.lastToolCallStatus = .idle
   }
 
   func sendVideoFrameIfThrottled(image: UIImage) {
@@ -313,6 +327,16 @@ class GeminiSessionViewModel: ObservableObject {
     // Keep the trigger tight to avoid false positives.
     // We only match explicit "Jarvis stop/deactivate/shutdown" style commands.
     let tokens = norm.split(separator: " ").map(String.init)
+
+    if let cmd = parseExplicitVideoCommand(tokens: tokens) {
+      handleLocalCommandOnce(key: cmd.key) {
+        cancelInFlightToolCalls()
+        NotificationCenter.default.post(name: cmd.notificationName, object: nil)
+        audioManager.playChime()
+      }
+      return
+    }
+
     let shouldDeactivate = isExplicitDeactivateCommand(tokens: tokens)
     guard shouldDeactivate else { return }
 
@@ -353,6 +377,72 @@ class GeminiSessionViewModel: ObservableObject {
     return false
   }
 
+  private struct VideoCommand {
+    let key: String
+    let notificationName: Notification.Name
+  }
+
+  private func parseExplicitVideoCommand(tokens: [String]) -> VideoCommand? {
+    if tokens.isEmpty { return nil }
+
+    // Drop a few common fillers.
+    var t = tokens
+    while let first = t.first, ["hey", "ok", "okay", "please", "um", "uh"].contains(first) {
+      t.removeFirst()
+    }
+    if t.isEmpty { return nil }
+
+    // Require an explicit "jarvis" anchor to avoid accidental camera activation.
+    if t.first == "jarvis" {
+      let rest = Array(t.dropFirst())
+      return parseVideoCommandRest(rest)
+    }
+
+    // "Turn video on Jarvis" style.
+    if t.last == "jarvis" {
+      let rest = Array(t.dropLast())
+      return parseVideoCommandRest(rest)
+    }
+
+    return nil
+  }
+
+  private func parseVideoCommandRest(_ rest: [String]) -> VideoCommand? {
+    if rest.count >= 2 {
+      // "video on/off", "camera on/off", "vision on/off"
+      if ["video", "camera", "vision"].contains(rest[0]) {
+        if rest[1] == "on" {
+          return VideoCommand(key: "video_on", notificationName: .jarvisVideoOnRequested)
+        }
+        if rest[1] == "off" {
+          return VideoCommand(key: "video_off", notificationName: .jarvisVideoOffRequested)
+        }
+      }
+    }
+
+    if rest.count >= 3, rest[0] == "turn", ["video", "camera", "vision"].contains(rest[1]) {
+      // "turn video on/off"
+      if rest[2] == "on" {
+        return VideoCommand(key: "video_on", notificationName: .jarvisVideoOnRequested)
+      }
+      if rest[2] == "off" {
+        return VideoCommand(key: "video_off", notificationName: .jarvisVideoOffRequested)
+      }
+    }
+
+    return nil
+  }
+
+  private func handleLocalCommandOnce(key: String, action: () -> Void) {
+    let now = Date()
+    if lastLocalCommandKey == key, now.timeIntervalSince(lastLocalCommandAt) < 2.5 {
+      return
+    }
+    lastLocalCommandKey = key
+    lastLocalCommandAt = now
+    action()
+  }
+
   private func normalizeCommandText(_ input: String) -> String {
     // Lowercase, replace punctuation with spaces, and collapse whitespace.
     let lower = input.lowercased()
@@ -366,6 +456,28 @@ class GeminiSessionViewModel: ObservableObject {
       }
     }
     return out.split(whereSeparator: { $0 == " " || $0 == "\n" || $0 == "\t" }).joined(separator: " ")
+  }
+
+  private func shouldAutoRetryDisconnect(reason: String) -> Bool {
+    let lower = reason.lowercased()
+    if lower.contains("invalid api key") || lower.contains("permission denied") || lower.contains("401") || lower.contains("403") {
+      return false
+    }
+    if lower.contains("normal closure") {
+      return false
+    }
+    return true
+  }
+
+  private func retryDelayNanos(forAttempt attempt: Int) -> UInt64 {
+    switch attempt {
+    case 1:
+      return 700_000_000
+    case 2:
+      return 1_400_000_000
+    default:
+      return 2_500_000_000
+    }
   }
 
 }

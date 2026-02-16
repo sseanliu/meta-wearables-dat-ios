@@ -7,9 +7,9 @@
  */
 
 //
-// CameraAccessApp.swift
+// JarvisApp.swift
 //
-// Main entry point for the CameraAccess sample app demonstrating the Meta Wearables DAT SDK.
+// Main entry point for the Jarvis app built on top of the Meta Wearables DAT SDK.
 // This app shows how to connect to wearable devices (like Ray-Ban Meta smart glasses),
 // stream live video from their cameras, and capture photos. It provides a complete example
 // of DAT SDK integration including device registration, permissions, and media streaming.
@@ -25,7 +25,7 @@ import MWDATMockDevice
 #endif
 
 @main
-struct CameraAccessApp: App {
+struct JarvisApp: App {
   #if DEBUG
   // Debug menu for simulating device connections during development
   @StateObject private var debugMenuViewModel = DebugMenuViewModel(mockDeviceKit: MockDeviceKit.shared)
@@ -41,7 +41,7 @@ struct CameraAccessApp: App {
       try Wearables.configure()
     } catch {
       #if DEBUG
-      NSLog("[CameraAccess] Failed to configure Wearables SDK: \(error)")
+      NSLog("[Jarvis] Failed to configure Wearables SDK: \(error)")
       #endif
     }
     let wearables = Wearables.shared

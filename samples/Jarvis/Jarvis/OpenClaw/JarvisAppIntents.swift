@@ -35,6 +35,8 @@ struct StopJarvisIntent: AppIntent {
 
 extension Notification.Name {
   static let jarvisStopRequested = Notification.Name("jarvis.stop_requested")
+  static let jarvisVideoOnRequested = Notification.Name("jarvis.video_on_requested")
+  static let jarvisVideoOffRequested = Notification.Name("jarvis.video_off_requested")
 }
 
 struct JarvisShortcuts: AppShortcutsProvider {

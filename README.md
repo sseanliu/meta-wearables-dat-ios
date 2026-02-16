@@ -59,8 +59,8 @@ Gemini Live API (WebSocket)
 
 ```bash
 git clone https://github.com/sseanliu/VisionClaw.git
-cd VisionClaw/samples/CameraAccess
-open CameraAccess.xcodeproj
+cd VisionClaw/samples/Jarvis
+open Jarvis.xcodeproj
 ```
 
 ### 2. Add your Gemini API key
@@ -82,7 +82,7 @@ Select your iPhone as the target device and hit Run (Cmd+R).
 
 **With Meta Ray-Ban glasses:**
 1. Pair your glasses via the Meta AI app (enable Developer Mode)
-2. Tap **"Start Streaming"** in the app
+2. Tap **"Enable Video"** (or say “Jarvis video on”) when you want the glasses camera
 3. Tap the **AI button** for voice + vision conversation
 
 ## Setup: OpenClaw (Optional)
@@ -146,7 +146,7 @@ Now when you talk to the AI, it can execute tasks through OpenClaw.
 
 ### Key Files
 
-All source code is in `samples/CameraAccess/CameraAccess/`:
+All source code is in `samples/Jarvis/Jarvis/`:
 
 | File | Purpose |
 |------|---------|
