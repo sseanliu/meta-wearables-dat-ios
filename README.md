@@ -201,6 +201,8 @@ Gemini Live supports function calling. This app declares a single `execute` tool
 
 **Gemini doesn't hear me** -- Check that microphone permission is granted. The app uses aggressive voice activity detection -- speak clearly and at normal volume.
 
+**OpenClaw opens duplicate browser tabs** -- This is a known upstream issue in OpenClaw's CDP (Chrome DevTools Protocol) connection management ([#13851](https://github.com/nichochar/openclaw/issues/13851), [#12317](https://github.com/nichochar/openclaw/issues/12317)). The browser control service loses track of existing tabs after navigation, falling back to opening new ones. Using `profile: "openclaw"` (managed Chrome) instead of the default extension relay may improve stability.
+
 For DAT SDK issues, see the [developer documentation](https://wearables.developer.meta.com/docs/develop/) or the [discussions forum](https://github.com/facebook/meta-wearables-dat-ios/discussions).
 
 ## License

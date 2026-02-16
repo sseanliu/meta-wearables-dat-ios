@@ -4,20 +4,9 @@ struct GeminiStatusBar: View {
   @ObservedObject var geminiVM: GeminiSessionViewModel
 
   var body: some View {
-    HStack {
-      // Connection status pill
-      HStack(spacing: 6) {
-        Circle()
-          .fill(statusColor)
-          .frame(width: 8, height: 8)
-        Text(statusText)
-          .font(.system(size: 12, weight: .medium))
-          .foregroundColor(.white)
-      }
-      .padding(.horizontal, 12)
-      .padding(.vertical, 6)
-      .background(Color.black.opacity(0.6))
-      .cornerRadius(16)
+    HStack(spacing: 8) {
+      // Gemini connection pill
+      StatusPill(color: geminiStatusColor, text: geminiStatusText)
 
       if !geminiVM.audioRouteLabel.isEmpty {
         HStack(spacing: 6) {
@@ -37,7 +26,7 @@ struct GeminiStatusBar: View {
     }
   }
 
-  private var statusColor: Color {
+  private var geminiStatusColor: Color {
     switch geminiVM.connectionState {
     case .ready: return .green
     case .connecting, .settingUp: return .yellow
@@ -46,13 +35,51 @@ struct GeminiStatusBar: View {
     }
   }
 
-  private var statusText: String {
+  private var geminiStatusText: String {
     switch geminiVM.connectionState {
-    case .ready: return "AI Active"
-    case .connecting, .settingUp: return "Connecting..."
-    case .error: return "Error"
-    case .disconnected: return "Disconnected"
+    case .ready: return "Gemini"
+    case .connecting, .settingUp: return "Gemini..."
+    case .error: return "Gemini Error"
+    case .disconnected: return "Gemini Off"
     }
+  }
+
+  private var openClawStatusColor: Color {
+    switch geminiVM.openClawConnectionState {
+    case .connected: return .green
+    case .checking: return .yellow
+    case .unreachable: return .red
+    case .notConfigured: return .gray
+    }
+  }
+
+  private var openClawStatusText: String {
+    switch geminiVM.openClawConnectionState {
+    case .connected: return "OpenClaw"
+    case .checking: return "OpenClaw..."
+    case .unreachable: return "OpenClaw Off"
+    case .notConfigured: return "No OpenClaw"
+    }
+  }
+}
+
+struct StatusPill: View {
+  let color: Color
+  let text: String
+
+  var body: some View {
+    HStack(spacing: 6) {
+      Circle()
+        .fill(color)
+        .frame(width: 8, height: 8)
+      Text(text)
+        .font(.system(size: 12, weight: .medium))
+        .foregroundColor(.white)
+    }
+    .padding(.horizontal, 12)
+    .padding(.vertical, 6)
+    .background(Color.black.opacity(0.6))
+    .cornerRadius(16)
   }
 }
 

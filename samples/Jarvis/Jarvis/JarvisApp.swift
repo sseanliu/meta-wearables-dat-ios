@@ -20,7 +20,7 @@ import AppIntents
 import MWDATCore
 import SwiftUI
 
-#if DEBUG
+#if canImport(MWDATMockDevice)
 import MWDATMockDevice
 #endif
 
@@ -62,7 +62,7 @@ struct JarvisApp: App {
         } message: {
           Text(wearablesViewModel.errorMessage)
         }
-        #if DEBUG
+        #if canImport(MWDATMockDevice)
       .sheet(isPresented: $debugMenuViewModel.showDebugMenu) {
         MockDeviceKitView(viewModel: debugMenuViewModel.mockDeviceKitViewModel)
       }

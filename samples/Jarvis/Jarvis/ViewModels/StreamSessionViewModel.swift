@@ -45,12 +45,24 @@ class StreamSessionViewModel: ObservableObject {
     streamingStatus != .stopped
   }
 
+  var resolutionLabel: String {
+    switch selectedResolution {
+    case .low: return "360x640"
+    case .medium: return "504x896"
+    case .high: return "720x1280"
+    @unknown default: return "Unknown"
+    }
+  }
+
   // Photo capture properties
   @Published var capturedPhoto: UIImage?
   @Published var showPhotoPreview: Bool = false
 
   // Gemini Live integration
   var geminiSessionVM: GeminiSessionViewModel?
+
+  // WebRTC Live streaming integration
+  var webrtcSessionVM: WebRTCSessionViewModel?
 
   // The core DAT SDK StreamSession - handles all streaming operations
   private var streamSession: StreamSession
@@ -81,8 +93,25 @@ class StreamSessionViewModel: ObservableObject {
       }
     }
 
+    attachListeners()
+  }
+
+  /// Recreate the StreamSession with the current selectedResolution.
+  /// Only call when not actively streaming.
+  func updateResolution(_ resolution: StreamingResolution) {
+    guard !isStreaming else { return }
+    selectedResolution = resolution
+    let config = StreamSessionConfig(
+      videoCodec: VideoCodec.raw,
+      resolution: resolution,
+      frameRate: 24)
+    streamSession = StreamSession(streamSessionConfig: config, deviceSelector: deviceSelector)
+    attachListeners()
+    NSLog("[Stream] Resolution changed to %@", resolutionLabel)
+  }
+
+  private func attachListeners() {
     // Subscribe to session state changes using the DAT SDK listener pattern
-    // State changes tell us when streaming starts, stops, or encounters issues
     stateListenerToken = streamSession.statePublisher.listen { [weak self] state in
       Task { @MainActor [weak self] in
         self?.updateStatusFromState(state)
@@ -90,7 +119,6 @@ class StreamSessionViewModel: ObservableObject {
     }
 
     // Subscribe to video frames from the device camera
-    // Each VideoFrame contains the raw camera data that we convert to UIImage
     videoFrameListenerToken = streamSession.videoFramePublisher.listen { [weak self] videoFrame in
       Task { @MainActor [weak self] in
         guard let self else { return }
@@ -102,15 +130,21 @@ class StreamSessionViewModel: ObservableObject {
           }
           // Forward video frames to Gemini Live (throttled internally to ~1fps)
           self.geminiSessionVM?.sendVideoFrameIfThrottled(image: image)
+          // Forward video frames to WebRTC (no throttle — WebRTC handles bitrate)
+          self.webrtcSessionVM?.pushVideoFrame(image)
         }
       }
     }
 
     // Subscribe to streaming errors
-    // Errors include device disconnection, streaming failures, etc.
     errorListenerToken = streamSession.errorPublisher.listen { [weak self] error in
       Task { @MainActor [weak self] in
         guard let self else { return }
+        // Suppress device-not-found errors when user hasn't started streaming yet
+        if self.streamingStatus == .stopped {
+          if case .deviceNotConnected = error { return }
+          if case .deviceNotFound = error { return }
+        }
         let newErrorMessage = formatStreamingError(error)
         if newErrorMessage != self.errorMessage {
           showError(newErrorMessage)
@@ -121,7 +155,6 @@ class StreamSessionViewModel: ObservableObject {
     updateStatusFromState(streamSession.state)
 
     // Subscribe to photo capture events
-    // PhotoData contains the captured image in the requested format (JPEG/HEIC)
     photoDataListenerToken = streamSession.photoDataPublisher.listen { [weak self] photoData in
       Task { @MainActor [weak self] in
         guard let self else { return }
@@ -196,6 +229,7 @@ class StreamSessionViewModel: ObservableObject {
           self.hasReceivedFirstFrame = true
         }
         self.geminiSessionVM?.sendVideoFrameIfThrottled(image: image)
+        self.webrtcSessionVM?.pushVideoFrame(image)
       }
     }
     camera.start()
